@@ -12,9 +12,6 @@ import csv
 from pathlib import Path
 from datetime import datetime
 
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
-
 from db import get_connection, BASE_DIR
 import operaciones as ops
 
@@ -23,6 +20,12 @@ EXPORT_DIR.mkdir(exist_ok=True)
 
 
 def exportar_ascensos_excel(anio: int, solo_1421: bool = True, fecha_corte=None):
+    # Import diferido a propósito: así "backup_csv" (el respaldo pensado para
+    # funcionar SIN depender de nada especial) sigue andando aunque openpyxl
+    # no esté instalado o falle. Sólo hace falta para generar .xlsx.
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
     resultados = ops.listar_ascensos_anio(anio, solo_1421=solo_1421, fecha_corte=fecha_corte)
 
     wb = Workbook()
@@ -60,6 +63,9 @@ def exportar_ascensos_excel(anio: int, solo_1421: bool = True, fecha_corte=None)
 
 
 def exportar_agentes_excel(solo_1421: bool = True):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
     resultados = ops.listar_agentes_activos(solo_1421=solo_1421)
 
     wb = Workbook()

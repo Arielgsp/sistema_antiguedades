@@ -155,8 +155,10 @@ previo.
    base resista un corte de luz o un cierre abrupto sin corromperse.
 6. **Verificación de integridad** disponible en cualquier momento
    (`PRAGMA integrity_check`, opción 9 del menú).
-7. **Doble respaldo**: además del `.db`, `exportar.py backup_csv` vuelca
-   todas las tablas a CSV plano, legible sin ningún programa especial.
+7. **Doble respaldo, y restaurable de verdad**: además del `.db`,
+   `exportar.py backup_csv` vuelca todas las tablas a CSV plano, legible
+   sin ningún programa especial. Y `restaurar_csv.py` permite reconstruir
+   la base completa desde ese CSV si hiciera falta (ver más abajo).
 
 ## Instalación y uso (con ventana, sin comandos)
 
@@ -204,6 +206,30 @@ prefiera trabajar por terminal.
 python exportar.py ascensos 2026     # listado de quiénes ascienden, en .xlsx
 python exportar.py backup_csv        # respaldo completo legible en CSV
 ```
+
+## Restaurar desde un backup CSV (peor caso: se perdió el .db y también /backups)
+
+```bash
+python restaurar_csv.py exports/backup_csv_AAAAMMDD_HHMMSS
+```
+
+Reconstruye `data/antiguedad.db` completo a partir de una carpeta de
+backup CSV (la que genera `python exportar.py backup_csv`). Pensado para
+el peor escenario: se perdió el archivo `.db` y también todo `/backups`,
+y sólo queda un CSV guardado en otro lado (pendrive, email, nube).
+
+Por seguridad:
+- Si el destino ya tiene agentes cargados, el script **se niega a
+  tocarlo** (para no pisar una base buena por error). Sólo continúa si
+  se agrega `--forzar`.
+- Si el destino ya existe, antes de tocarlo se guarda una copia en
+  `/backups`.
+- Se restaura dentro de una única transacción: si algo falla a mitad de
+  camino, no queda nada a medias.
+- Al terminar corre `PRAGMA integrity_check` y muestra cuántas filas se
+  restauraron por tabla.
+- Se puede probar de forma segura contra un archivo aparte antes de
+  usarlo en serio, con `--destino ruta/de/prueba.db`.
 
 ## Estructura de datos
 
@@ -446,6 +472,7 @@ sistema_antiguedad/
 ├── operaciones.py       Operaciones de negocio (consultas y escrituras)
 ├── cli.py               Menú interactivo
 ├── exportar.py           Exportación a Excel y backup CSV
+├── restaurar_csv.py       Reconstruye la base desde un backup CSV
 ├── importar_datos.py     Importación inicial (ya ejecutada)
 ├── test_sistema.py       Pruebas automáticas
 ├── data/antiguedad.db     Base de datos (nombre, DNI y datos laborales de
