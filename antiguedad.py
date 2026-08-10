@@ -198,7 +198,7 @@ def evaluar_agente_anio(periodos: List[Periodo], anio: int,
     """
     Evalúa a un agente al corte indicado (por defecto 31/12/`anio`) y
     también un año antes (mismo día/mes del año anterior a ese corte),
-    para determinar si hubo ascenso (con efecto 1/1/(anio+1)).
+    para determinar si hubo ascenso (con efecto el día siguiente al corte).
 
     `fecha_corte` permite evaluar en cualquier fecha del año `anio`,
     no sólo el 31/12 (por ejemplo, para proyectar un caso a mitad de año).
