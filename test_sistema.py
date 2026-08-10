@@ -151,6 +151,22 @@ conn.close()
 assert mal["c"] == 0, f"¡Hay {mal['c']} períodos con suma_apn mal calculado según el tipo!"
 print("OK: suma_apn coincide con la regla (todo cuenta excepto 'Priv')")
 
+# 14) Regresión: con una fecha de corte elegida a mano (no 31/12), la fecha
+# efectiva del ascenso es el día siguiente A ESA fecha, no siempre 1/1.
+# Caso real: evaluar al 2027-01-15 para decidir una renovación de contrato
+# el 2027-01-16. El agente de prueba (ingreso 2023-05-01) ya tiene más de
+# 3 años computables en esa fecha.
+linea("14) Fecha efectiva con fecha de corte personalizada (no 31/12)")
+r_corte_custom = ops.evaluar_ascenso_agente(TEST_DOC, 2027, fecha_corte=date(2027, 1, 15))
+print("Evaluación al 2027-01-15:", r_corte_custom["antiguedad_computable_texto"],
+      "asciende:", r_corte_custom["asciende"], "efectivo:", r_corte_custom["fecha_efectiva_ascenso"])
+assert r_corte_custom["asciende"] is True
+assert r_corte_custom["fecha_efectiva_ascenso"] == "2027-01-16", (
+    "La fecha efectiva debe ser el día siguiente a la fecha de corte elegida "
+    f"(2027-01-16), no {r_corte_custom['fecha_efectiva_ascenso']}"
+)
+print("OK: la fecha efectiva sigue a la fecha de corte elegida, no queda fija en 1/1")
+
 # Limpieza del agente de prueba (dejamos la base real intacta)
 linea("Limpieza: eliminando agente de prueba")
 conn = get_connection()

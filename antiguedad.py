@@ -4,13 +4,20 @@ antiguedad.py - Lógica de cómputo de antigüedad y ascensos de grado.
 Regla de negocio (tal como la definió el usuario):
   * Un agente asciende UN (1) grado por cada TRES (3) años de
     antigüedad computable.
-  * La antigüedad se evalúa al 31 de diciembre de cada año.
-  * Si al 31/12 de un año X el agente acumuló un múltiplo de 3 años
-    (computables) que antes no tenía, asciende con efecto a partir
-    del 1° de enero del año SIGUIENTE (X+1).
-  * Ejemplo: ingresó 01/05/2023. Cumple 3 años el 01/05/2026. Como
-    recién se evalúa al 31/12/2026 (fecha en la que ya tiene 3 años
-    y 8 meses), el ascenso corresponde a partir del 01/01/2027.
+  * La antigüedad se evalúa a una fecha de corte (por defecto, el 31 de
+    diciembre de cada año; se puede elegir cualquier otra fecha, por
+    ejemplo para evaluar de cara a una renovación de contrato).
+  * Si a la fecha de corte el agente acumuló un múltiplo de 3 años
+    (computables) que no tenía un año antes de esa misma fecha, asciende
+    con efecto a partir del día SIGUIENTE a la fecha de corte evaluada.
+  * Ejemplo con el corte por defecto (31/12): ingresó 01/05/2023. Cumple
+    3 años el 01/05/2026. Como recién se evalúa al 31/12/2026 (fecha en
+    la que ya tiene 3 años y 8 meses), el ascenso corresponde a partir
+    del 01/01/2027 (el día siguiente al corte).
+  * Ejemplo con corte elegido a mano: si se evalúa al 15/01/2027 (por
+    ejemplo, para decidir una renovación de contrato el 16/01/2027), y
+    el agente cumple los 3 años en esa ventana, el ascenso corresponde
+    a partir del 16/01/2027 (el día siguiente a esa fecha de corte).
   * Sólo cuentan los períodos de antigüedad marcados como
     cuenta_ascenso = 1, y sólo la porción de esos períodos que cae
     dentro de [fecha_inicio_conteo_grado, fecha_cierre_conteo] del
@@ -215,7 +222,7 @@ def evaluar_agente_anio(periodos: List[Periodo], anio: int,
 
     asciende = grados_actual > grados_anterior
     grados_nuevos = grados_actual - grados_anterior if asciende else 0
-    fecha_efectiva = date(corte_actual.year + 1, 1, 1) if asciende else None
+    fecha_efectiva = corte_actual + timedelta(days=1) if asciende else None
 
     return {
         "anio_evaluado": corte_actual.year,

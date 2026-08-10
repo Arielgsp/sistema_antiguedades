@@ -3,9 +3,10 @@
 Sistema para calcular automáticamente la antigüedad computable de cada
 agente y determinar quién asciende de grado cada año, según la regla:
 
-> **1 grado cada 3 años de antigüedad computable, evaluados al 31 de
-> diciembre de cada año, con efecto a partir del 1° de enero del año
-> siguiente.**
+> **1 grado cada 3 años de antigüedad computable, evaluados a una fecha
+> de corte (por defecto el 31 de diciembre de cada año, aunque se puede
+> elegir cualquier otra), con efecto a partir del día siguiente a esa
+> fecha de corte.**
 
 Construido en **Python + SQLite** por ser la combinación más robusta para
 datos que no se pueden perder: transacciones ACID reales, un único
