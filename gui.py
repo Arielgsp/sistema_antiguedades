@@ -12,7 +12,7 @@ aparece en ningún listado.
 
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from db import init_db, verificar_integridad, backup_antes_de_escribir, DB_PATH, BACKUP_DIR
 import operaciones as ops
@@ -759,9 +759,10 @@ class App(tk.Tk):
             self.tree_ascensos.insert("", "end", values=(
                 r["n_doc"], r["apellido_nombre"], r["grados_anio_anterior"], r["grados_acumulados"],
                 f"+{r['grados_nuevos']}", r["antiguedad_computable_texto"], fecha_es(r["fecha_efectiva_ascenso"])))
+        fecha_efectiva = fecha_corte + timedelta(days=1)
         self.lbl_ascensos_resumen.config(
             text=f"Ascienden {len(resultados)} agente(s) del Decreto 1421/02, "
-                 f"con efecto a partir del 01/01/{anio + 1}.")
+                 f"con efecto a partir del {fecha_es(fecha_efectiva.isoformat())}.")
         self._ultimo_anio_calculado = anio
         self._ultima_fecha_corte_calculada = fecha_corte
         self.set_status("Cálculo completado.")
