@@ -448,7 +448,8 @@ sistema_antiguedad/
 ├── exportar.py           Exportación a Excel y backup CSV
 ├── importar_datos.py     Importación inicial (ya ejecutada)
 ├── test_sistema.py       Pruebas automáticas
-├── data/antiguedad.db     Base de datos (NO subir a repos públicos: datos personales)
+├── data/antiguedad.db     Base de datos (nombre, DNI y datos laborales de
+│                          agentes públicos: información de acceso público)
 ├── backups/              Copias de seguridad automáticas
 └── exports/              Reportes generados
 ```

@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS agentes (
     tiene_baja_1421     INTEGER NOT NULL DEFAULT 0,  -- 1 si CONTRATADOS registra Fecha de baja
     cuenta_1421         INTEGER NOT NULL DEFAULT 0,  -- 1 = vinculado_1421=1 AND tiene_baja_1421=0 (el que usan los reportes)
     motivo_clasif_1421  TEXT,                        -- explicación legible de la clasificación
+    dependencia_1421    TEXT,                        -- dependencia del contrato 1421 vigente
+    contrato_desde_1421 TEXT,                        -- fecha desde del contrato 1421 vigente
+    contrato_hasta_1421 TEXT,                         -- fecha hasta del contrato 1421 vigente
     fecha_carga         TEXT NOT NULL DEFAULT (datetime('now')),
     fecha_modif         TEXT NOT NULL DEFAULT (datetime('now')),
     usuario_modif       TEXT
@@ -52,6 +55,10 @@ CREATE TABLE IF NOT EXISTS periodos_antiguedad (
     fecha_modif         TEXT NOT NULL DEFAULT (datetime('now')),
     usuario_carga        TEXT,
     usuario_modif        TEXT,
+    tipo_prestacion      TEXT,              -- tipo de servicio anterior (ej. 'Priv', 'Pas') importado de Nac_Priv
+    suma_apn             INTEGER NOT NULL DEFAULT 1,  -- 1=suma para Antigüedad en la Administración Pública Nacional
+    planta_nac           TEXT,              -- planta/organismo de origen (importado de Nac_Priv)
+    motivo_baja          TEXT,
     CHECK (fecha_hasta IS NULL OR fecha_hasta >= fecha_desde)
 );
 
