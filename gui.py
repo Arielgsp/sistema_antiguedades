@@ -351,8 +351,18 @@ class App(tk.Tk):
         self.lbl_totales_fecha = tk.Label(der, text="", bg=COLOR_BG, fg="#777", font=("Segoe UI", 8))
         self.lbl_totales_fecha.pack(anchor="w", pady=(2, 0))
 
-        ttk.Button(der, text="Proyectar antigüedad a otra fecha...",
-                   command=self.accion_proyectar_fecha).pack(anchor="w", pady=(4, 0))
+        proy_frame = tk.Frame(der, bg=COLOR_BG)
+        proy_frame.pack(anchor="w", fill="x", pady=(6, 0))
+        tk.Label(proy_frame, text="Proyectar antigüedad a otra fecha (AAAA-MM-DD):",
+                 bg=COLOR_BG).pack(side="left")
+        self.entry_proyeccion = ttk.Entry(proy_frame, width=12)
+        self.entry_proyeccion.pack(side="left", padx=(4, 4))
+        self.entry_proyeccion.bind("<Return>", lambda e: self.accion_proyectar_fecha())
+        ttk.Button(proy_frame, text="Calcular", command=self.accion_proyectar_fecha).pack(side="left")
+
+        self.lbl_proyeccion = tk.Label(der, text="", justify="left", anchor="w", bg=COLOR_BG,
+                                        fg=COLOR_HEADER, font=("Segoe UI", 9, "bold"), wraplength=560)
+        self.lbl_proyeccion.pack(anchor="w", fill="x", pady=(4, 0))
 
     def accion_buscar(self, inicial=False):
         texto = self.entry_buscar.get().strip()
@@ -439,6 +449,11 @@ class App(tk.Tk):
         self.lbl_total_apn.config(text=calc["antiguedad_apn_texto"])
         self.lbl_total_1421.config(text=calc["antiguedad_texto"])
         self.lbl_totales_fecha.config(text=f"Calculado al {fecha_es(self.fecha_corte_oficial.isoformat())}.")
+
+        # Limpiar la proyección de fecha: es una consulta puntual que no debe
+        # quedar pegada al pasar de un agente a otro.
+        self.entry_proyeccion.delete(0, "end")
+        self.lbl_proyeccion.config(text="")
 
     def _requiere_agente(self):
         if not self.n_doc_actual:
@@ -595,17 +610,13 @@ class App(tk.Tk):
         """Consulta puntual: antigüedad y ascenso de UN agente a cualquier fecha
         (pasada o futura), sin cambiar la fecha de corte general ni la
         configuración guardada de nadie. Reutiliza el mismo cálculo que ya
-        usa 'Ascensos por año'."""
+        usa 'Ascensos por año'. El resultado se muestra en self.lbl_proyeccion,
+        que se limpia solo cada vez que se carga otra ficha (_cargar_ficha)."""
         if not self._requiere_agente():
             return
-        nombre = self.lbl_ficha_titulo.cget("text")
-        fecha_txt = simpledialog.askstring(
-            "Proyectar antigüedad",
-            f"Calcular la antigüedad de {nombre} a qué fecha (AAAA-MM-DD)?\n\n"
-            "Es sólo una consulta puntual para este agente: no cambia la fecha\n"
-            "de corte general ni queda guardado en ningún lado.",
-            parent=self)
+        fecha_txt = self.entry_proyeccion.get().strip()
         if not fecha_txt:
+            messagebox.showerror("Error", "Escribí una fecha (AAAA-MM-DD) para proyectar.")
             return
         if not fecha_valida(fecha_txt):
             messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
@@ -614,17 +625,16 @@ class App(tk.Tk):
         calc = ops.calcular_antiguedad_agente(self.n_doc_actual, fecha)
         r = ops.evaluar_ascenso_agente(self.n_doc_actual, fecha.year, fecha_corte=fecha)
 
-        mensaje = (
-            f"Antigüedad al {fecha_es(fecha_txt)}:\n\n"
-            f"Ascenso de grado (Decreto 1421/02): {calc['antiguedad_texto']}\n"
-            f"Administración Pública Nacional: {calc['antiguedad_apn_texto']}\n\n"
-            f"Grados acumulados a esa fecha: {r['grados_acumulados']}\n"
-        )
         if r["asciende"]:
-            mensaje += f"Asciende con efecto a partir del {fecha_es(r['fecha_efectiva_ascenso'])}."
+            resultado_grado = f"Asciende, con efecto a partir del {fecha_es(r['fecha_efectiva_ascenso'])}."
         else:
-            mensaje += "No suma un grado nuevo en esta evaluación."
-        messagebox.showinfo(f"Proyección — {nombre}", mensaje)
+            resultado_grado = "No suma un grado nuevo en esta evaluación."
+
+        self.lbl_proyeccion.config(
+            text=f"Proyección al {fecha_es(fecha_txt)} — "
+                 f"1421: {calc['antiguedad_texto']} (grados: {r['grados_acumulados']})  |  "
+                 f"APN: {calc['antiguedad_apn_texto']}  |  {resultado_grado}"
+        )
 
     def accion_editar_agente(self):
         if not self._requiere_agente():
