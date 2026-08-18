@@ -351,6 +351,9 @@ class App(tk.Tk):
         self.lbl_totales_fecha = tk.Label(der, text="", bg=COLOR_BG, fg="#777", font=("Segoe UI", 8))
         self.lbl_totales_fecha.pack(anchor="w", pady=(2, 0))
 
+        ttk.Button(der, text="Proyectar antigüedad a otra fecha...",
+                   command=self.accion_proyectar_fecha).pack(anchor="w", pady=(4, 0))
+
     def accion_buscar(self, inicial=False):
         texto = self.entry_buscar.get().strip()
         if not texto and not inicial:
@@ -587,6 +590,41 @@ class App(tk.Tk):
             self.set_status("Configuración guardada.")
         except Exception as e:
             messagebox.showerror("Error al guardar", str(e))
+
+    def accion_proyectar_fecha(self):
+        """Consulta puntual: antigüedad y ascenso de UN agente a cualquier fecha
+        (pasada o futura), sin cambiar la fecha de corte general ni la
+        configuración guardada de nadie. Reutiliza el mismo cálculo que ya
+        usa 'Ascensos por año'."""
+        if not self._requiere_agente():
+            return
+        nombre = self.lbl_ficha_titulo.cget("text")
+        fecha_txt = simpledialog.askstring(
+            "Proyectar antigüedad",
+            f"Calcular la antigüedad de {nombre} a qué fecha (AAAA-MM-DD)?\n\n"
+            "Es sólo una consulta puntual para este agente: no cambia la fecha\n"
+            "de corte general ni queda guardado en ningún lado.",
+            parent=self)
+        if not fecha_txt:
+            return
+        if not fecha_valida(fecha_txt):
+            messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
+            return
+        fecha = date.fromisoformat(fecha_txt)
+        calc = ops.calcular_antiguedad_agente(self.n_doc_actual, fecha)
+        r = ops.evaluar_ascenso_agente(self.n_doc_actual, fecha.year, fecha_corte=fecha)
+
+        mensaje = (
+            f"Antigüedad al {fecha_es(fecha_txt)}:\n\n"
+            f"Ascenso de grado (Decreto 1421/02): {calc['antiguedad_texto']}\n"
+            f"Administración Pública Nacional: {calc['antiguedad_apn_texto']}\n\n"
+            f"Grados acumulados a esa fecha: {r['grados_acumulados']}\n"
+        )
+        if r["asciende"]:
+            mensaje += f"Asciende con efecto a partir del {fecha_es(r['fecha_efectiva_ascenso'])}."
+        else:
+            mensaje += "No suma un grado nuevo en esta evaluación."
+        messagebox.showinfo(f"Proyección — {nombre}", mensaje)
 
     def accion_editar_agente(self):
         if not self._requiere_agente():
