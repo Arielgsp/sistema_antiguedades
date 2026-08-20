@@ -2,6 +2,7 @@
 import sqlite3
 from datetime import date
 import operaciones as ops
+from antiguedad import Periodo, antiguedad_computable_dias
 from db import get_connection, verificar_integridad, DB_PATH
 
 def linea(msg):
@@ -166,6 +167,44 @@ assert r_corte_custom["fecha_efectiva_ascenso"] == "2027-01-16", (
     f"(2027-01-16), no {r_corte_custom['fecha_efectiva_ascenso']}"
 )
 print("OK: la fecha efectiva sigue a la fecha de corte elegida, no queda fija en 1/1")
+
+# 15) Cortar un período por una licencia (excedencia, licencia extraordinaria
+# sin goce, etc.): debe descontar exactamente los días de la licencia, ni
+# uno más ni uno menos, comparado contra una cuenta manual independiente.
+linea("15) Cortar período por una licencia (excluir un tramo intermedio)")
+pid_corte = ops.cargar_periodo(TEST_DOC, "2020-01-01", "2025-06-15", "Organismo corte", True, "", "test_script")
+orig_id, nuevo_id = ops.cortar_periodo_por_licencia(
+    pid_corte, "2021-04-01", "2022-12-31", "test_script", "licencia extraordinaria sin goce")
+assert nuevo_id is not None, "Debería haber creado un período nuevo tras la licencia"
+
+conn = get_connection()
+p1 = conn.execute("SELECT fecha_desde, fecha_hasta FROM periodos_antiguedad WHERE id=?", (orig_id,)).fetchone()
+p2 = conn.execute("SELECT fecha_desde, fecha_hasta FROM periodos_antiguedad WHERE id=?", (nuevo_id,)).fetchone()
+conn.close()
+assert p1["fecha_hasta"] == "2021-03-31", f"Fecha hasta del original mal: {p1['fecha_hasta']}"
+assert p2["fecha_desde"] == "2023-01-01", f"Fecha desde del nuevo mal: {p2['fecha_desde']}"
+assert p2["fecha_hasta"] == "2025-06-15", f"Fecha hasta del nuevo mal: {p2['fecha_hasta']}"
+
+dias_tramo1 = (date(2021, 3, 31) - date(2020, 1, 1)).days + 1
+dias_tramo2 = (date(2025, 6, 15) - date(2023, 1, 1)).days + 1
+periodos_solo_corte = [
+    Periodo(date(2020, 1, 1), date(2021, 3, 31), True),
+    Periodo(date(2023, 1, 1), date(2025, 6, 15), True),
+]
+dias_solo_corte = antiguedad_computable_dias(periodos_solo_corte, date(2026, 8, 20))
+assert dias_solo_corte == dias_tramo1 + dias_tramo2, (
+    f"Los días computables del período cortado ({dias_solo_corte}) no coinciden con la "
+    f"suma manual de los dos tramos ({dias_tramo1 + dias_tramo2}) -- se estaría contando "
+    "de más o de menos la licencia."
+)
+print(f"OK: el corte descuenta exactamente los {(date(2022,12,31)-date(2021,4,1)).days + 1} "
+      "días de la licencia, verificado contra una cuenta manual independiente")
+
+try:
+    ops.cortar_periodo_por_licencia(pid_corte, "2020-01-01", "2020-06-01", "test_script")
+    raise AssertionError("Debería haber rechazado una licencia que arranca al inicio del período")
+except ValueError:
+    print("OK: rechaza correctamente una licencia que arranca en la fecha de inicio del período")
 
 # Limpieza del agente de prueba (dejamos la base real intacta)
 linea("Limpieza: eliminando agente de prueba")

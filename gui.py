@@ -330,6 +330,7 @@ class App(tk.Tk):
         ttk.Button(botones_periodos, text="Modificar seleccionado", command=self.accion_modificar_periodo).pack(side="left", padx=4)
         ttk.Button(botones_periodos, text="Alternar Cuenta/No cuenta (grado 1421)", command=self.accion_toggle_cuenta).pack(side="left", padx=4)
         ttk.Button(botones_periodos, text="Desactivar seleccionado", command=self.accion_desactivar_periodo).pack(side="left", padx=4)
+        ttk.Button(botones_periodos, text="Cortar por una licencia...", command=self.accion_cortar_periodo).pack(side="left", padx=4)
 
         totales = tk.Frame(der, bg=COLOR_BG)
         totales.pack(fill="x", pady=(6, 2))
@@ -588,6 +589,38 @@ class App(tk.Tk):
             self.set_status(f"Período #{pid} desactivado (sigue en el historial).")
         except Exception as e:
             messagebox.showerror("Error al guardar", str(e))
+
+    def accion_cortar_periodo(self):
+        """Divide el período seleccionado en dos, excluyendo un tramo
+        intermedio (licencia sin goce, excedencia, etc.). No cambia el
+        cálculo de antigüedad: sólo automatiza la carga de los dos tramos
+        que ya se podían cargar a mano."""
+        pid = self._periodo_seleccionado()
+        if pid is None:
+            return
+        r = pedir_formulario(
+            self, f"Cortar período #{pid} por una licencia",
+            [("desde", "Licencia desde (AAAA-MM-DD):", ""),
+             ("hasta", "Licencia hasta (AAAA-MM-DD):", ""),
+             ("motivo", "Motivo (ej. licencia extraordinaria sin goce, excedencia):", "")],
+            ayuda="El tramo de la licencia queda excluido del cómputo de antigüedad. "
+                  "El período se acorta hasta el día anterior, y se crea uno nuevo desde "
+                  "el día siguiente hasta donde llegaba el original."
+        )
+        if r is None:
+            return
+        if not fecha_valida(r["desde"]) or not r["desde"] or not fecha_valida(r["hasta"]) or not r["hasta"]:
+            messagebox.showerror("Error", "Las dos fechas de la licencia son obligatorias, formato AAAA-MM-DD.")
+            return
+        try:
+            _, nuevo_id = ops.cortar_periodo_por_licencia(pid, r["desde"], r["hasta"], self.usuario, r["motivo"])
+            self._cargar_ficha(self.n_doc_actual)
+            if nuevo_id:
+                self.set_status(f"Período #{pid} cortado. Nuevo período #{nuevo_id} creado tras la licencia.")
+            else:
+                self.set_status(f"Período #{pid} acortado hasta el día anterior a la licencia.")
+        except Exception as e:
+            messagebox.showerror("Error al cortar el período", str(e))
 
     def accion_configurar_agente(self):
         if not self._requiere_agente():
