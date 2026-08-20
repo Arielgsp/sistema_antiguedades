@@ -8,7 +8,7 @@ Cada función de escritura usa db.Transaccion, por lo que:
   * deja rastro en `auditoria`
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, List
 
 from db import Transaccion, registrar_auditoria, get_connection, row_to_dict
@@ -469,6 +469,83 @@ def desactivar_periodo(periodo_id: int, usuario: str, motivo: str = ""):
         )
         registrar_auditoria(conn, "periodos_antiguedad", "SOFT_DELETE", periodo_id, anterior,
                              {"activo": 0, "motivo": motivo}, usuario)
+
+
+def cortar_periodo_por_licencia(periodo_id: int, licencia_desde: str, licencia_hasta: str,
+                                 usuario: str, motivo: str = ""):
+    """Divide un período existente en dos, excluyendo un tramo intermedio
+    (licencia extraordinaria sin goce, excedencia, etc.) que no debe contar
+    para el cómputo de antigüedad.
+
+    No cambia ningún cálculo: el motor de antigüedad (antiguedad.py) ya
+    suma correctamente varios períodos separados por unión de intervalos.
+    Esto sólo automatiza la carga: acorta el período existente hasta el
+    día anterior a la licencia, y (si corresponde) crea uno nuevo desde el
+    día siguiente a la licencia hasta donde llegaba el original, con los
+    mismos datos (organismo, cuenta_ascenso, tipo, APN).
+
+    Devuelve (periodo_id_original, periodo_id_nuevo_o_None). Es None si la
+    licencia llega justo hasta el final del período (no hace falta un
+    tramo posterior, sólo se acorta el original).
+    """
+    d_licencia = _parse_fecha(licencia_desde)
+    h_licencia = _parse_fecha(licencia_hasta)
+    if not d_licencia or not h_licencia:
+        raise ValueError("Las fechas de la licencia son obligatorias (AAAA-MM-DD).")
+    if h_licencia < d_licencia:
+        raise ValueError("La fecha 'hasta' de la licencia no puede ser anterior a la fecha 'desde'.")
+
+    with Transaccion(f"cortar_periodo_licencia_{periodo_id}") as conn:
+        original = conn.execute("SELECT * FROM periodos_antiguedad WHERE id=?", (periodo_id,)).fetchone()
+        if not original:
+            raise ValueError(f"No existe el período {periodo_id}")
+        original = row_to_dict(original)
+
+        fecha_desde_orig = _parse_fecha(original["fecha_desde"])
+        fecha_hasta_orig = _parse_fecha(original["fecha_hasta"])  # None si vigente
+
+        if d_licencia <= fecha_desde_orig:
+            raise ValueError(
+                "La licencia no puede empezar en la fecha de inicio del período (o antes). "
+                "Si la licencia arranca desde el principio, corregí directamente la fecha "
+                "'desde' del período con 'Modificar seleccionado' en vez de cortarlo."
+            )
+        if fecha_hasta_orig and h_licencia > fecha_hasta_orig:
+            raise ValueError("La licencia termina después de la fecha 'hasta' del período.")
+
+        nueva_hasta_original = (d_licencia - timedelta(days=1)).isoformat()
+        nueva_desde_siguiente = h_licencia + timedelta(days=1)
+        detalle_motivo = f"licencia {licencia_desde} a {licencia_hasta}" + (f": {motivo}" if motivo else "")
+
+        conn.execute(
+            "UPDATE periodos_antiguedad SET fecha_hasta=?, fecha_modif=?, usuario_modif=? WHERE id=?",
+            (nueva_hasta_original, datetime.now().isoformat(), usuario, periodo_id),
+        )
+        registrar_auditoria(conn, "periodos_antiguedad", "UPDATE", periodo_id,
+                             {"fecha_hasta": original["fecha_hasta"]},
+                             {"fecha_hasta": nueva_hasta_original, "motivo": f"cortado por {detalle_motivo}"},
+                             usuario)
+
+        nuevo_id = None
+        # Si la licencia no llega hasta el final del período (o el período era
+        # vigente, sin fecha_hasta), se crea el tramo posterior a la licencia.
+        if fecha_hasta_orig is None or nueva_desde_siguiente <= fecha_hasta_orig:
+            cur = conn.execute(
+                """INSERT INTO periodos_antiguedad
+                       (n_doc, fecha_desde, fecha_hasta, organismo, cuenta_ascenso, observaciones,
+                        origen, usuario_carga, tipo_prestacion, suma_apn)
+                   VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)""",
+                (original["n_doc"], nueva_desde_siguiente.isoformat(), original["fecha_hasta"],
+                 original["organismo"], original["cuenta_ascenso"],
+                 f"Continuación del período #{periodo_id} tras {detalle_motivo}.",
+                 usuario, original["tipo_prestacion"], original["suma_apn"]),
+            )
+            nuevo_id = cur.lastrowid
+            registrar_auditoria(conn, "periodos_antiguedad", "INSERT", nuevo_id, None,
+                                 {"n_doc": original["n_doc"], "fecha_desde": nueva_desde_siguiente.isoformat(),
+                                  "continuacion_de": periodo_id}, usuario)
+
+        return periodo_id, nuevo_id
 
 
 def set_config_agente(n_doc: int, usuario: str, fecha_inicio_conteo_grado: Optional[str] = None,
