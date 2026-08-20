@@ -402,7 +402,8 @@ def aplicar_regla_tipo_periodo_por_nivel(usuario: str):
 # ------------------------------------------------------------------
 
 def cargar_periodo(n_doc: int, fecha_desde: str, fecha_hasta: Optional[str],
-                    organismo: str, cuenta_ascenso: bool, observaciones: str, usuario: str):
+                    organismo: str, cuenta_ascenso: bool, observaciones: str, usuario: str,
+                    tipo_prestacion: Optional[str] = None, suma_apn: bool = True):
     with Transaccion(f"cargar_periodo_{n_doc}") as conn:
         agente = conn.execute("SELECT n_doc FROM agentes WHERE n_doc=?", (n_doc,)).fetchone()
         if not agente:
@@ -410,21 +411,25 @@ def cargar_periodo(n_doc: int, fecha_desde: str, fecha_hasta: Optional[str],
         cur = conn.execute(
             """INSERT INTO periodos_antiguedad
                    (n_doc, fecha_desde, fecha_hasta, organismo, cuenta_ascenso,
-                    observaciones, origen, usuario_carga)
-               VALUES (?, ?, ?, ?, ?, ?, 'manual', ?)""",
-            (n_doc, fecha_desde, fecha_hasta, organismo, int(cuenta_ascenso), observaciones, usuario),
+                    observaciones, origen, usuario_carga, tipo_prestacion, suma_apn)
+               VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)""",
+            (n_doc, fecha_desde, fecha_hasta, organismo, int(cuenta_ascenso), observaciones, usuario,
+             tipo_prestacion or None, int(suma_apn)),
         )
         nuevo = {
             "n_doc": n_doc, "fecha_desde": fecha_desde, "fecha_hasta": fecha_hasta,
             "organismo": organismo, "cuenta_ascenso": int(cuenta_ascenso), "observaciones": observaciones,
+            "tipo_prestacion": tipo_prestacion, "suma_apn": int(suma_apn),
         }
         registrar_auditoria(conn, "periodos_antiguedad", "INSERT", cur.lastrowid, None, nuevo, usuario)
         return cur.lastrowid
 
 
 def modificar_periodo(periodo_id: int, usuario: str, **cambios):
-    """cambios puede incluir: fecha_desde, fecha_hasta, organismo, cuenta_ascenso, observaciones"""
-    campos_validos = {"fecha_desde", "fecha_hasta", "organismo", "cuenta_ascenso", "observaciones"}
+    """cambios puede incluir: fecha_desde, fecha_hasta, organismo, cuenta_ascenso, observaciones,
+    tipo_prestacion, suma_apn"""
+    campos_validos = {"fecha_desde", "fecha_hasta", "organismo", "cuenta_ascenso", "observaciones",
+                       "tipo_prestacion", "suma_apn"}
     cambios = {k: v for k, v in cambios.items() if k in campos_validos}
     if not cambios:
         return

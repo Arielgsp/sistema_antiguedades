@@ -470,6 +470,8 @@ class App(tk.Tk):
              ("fecha_hasta", "Fecha hasta (vacío = vigente):", ""),
              ("organismo", "Organismo / dependencia:", ""),
              ("cuenta", "¿Cuenta para ascenso de grado 1421? (S/N):", "S"),
+             ("tipo", "Tipo (texto libre, opcional):", ""),
+             ("capn", "¿Cuenta para Antigüedad APN? (S/N):", "S"),
              ("observaciones", "Observaciones:", "")],
             ayuda="Dejá 'Fecha hasta' vacía si el período sigue vigente."
         )
@@ -482,9 +484,11 @@ class App(tk.Tk):
             messagebox.showerror("Error", "La fecha hasta debe tener formato AAAA-MM-DD (o vacía).")
             return
         cuenta = r["cuenta"].strip().upper() in ("S", "SI", "SÍ", "1")
+        capn = r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")
         try:
             ops.cargar_periodo(self.n_doc_actual, r["fecha_desde"], r["fecha_hasta"] or None,
-                                r["organismo"], cuenta, r["observaciones"], self.usuario)
+                                r["organismo"], cuenta, r["observaciones"], self.usuario,
+                                tipo_prestacion=r["tipo"] or None, suma_apn=capn)
             self._cargar_ficha(self.n_doc_actual)
             self.set_status("Período cargado correctamente. Se hizo backup automático antes de guardar.")
         except Exception as e:
@@ -503,7 +507,7 @@ class App(tk.Tk):
             return
         vals = self.tree_periodos.item(str(pid))["values"]
         desde, hasta = vals[0], vals[1]
-        organismo, c1421 = vals[3], vals[5]
+        organismo, tipo, c1421, capn = vals[3], vals[4], vals[5], vals[6]
         hasta = "" if hasta == "vigente" else hasta
 
         def a_iso(d):
@@ -519,6 +523,8 @@ class App(tk.Tk):
              ("fecha_hasta", "Fecha hasta (vacío = vigente):", a_iso(hasta)),
              ("organismo", "Organismo:", organismo),
              ("cuenta", "¿Cuenta para ascenso de grado 1421? (S/N):", "S" if c1421 == "SI" else "N"),
+             ("tipo", "Tipo (texto libre, opcional):", tipo or ""),
+             ("capn", "¿Cuenta para Antigüedad APN? (S/N):", "S" if capn == "SI" else "N"),
              ("observaciones", "Observaciones (se agregan):", "")],
         )
         if r is None:
@@ -531,6 +537,8 @@ class App(tk.Tk):
             "fecha_hasta": r["fecha_hasta"] or None,
             "organismo": r["organismo"],
             "cuenta_ascenso": int(r["cuenta"].strip().upper() in ("S", "SI", "SÍ", "1")),
+            "tipo_prestacion": r["tipo"] or None,
+            "suma_apn": int(r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")),
         }
         if r["observaciones"]:
             cambios["observaciones"] = r["observaciones"]
