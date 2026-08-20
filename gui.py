@@ -509,6 +509,13 @@ class App(tk.Tk):
         desde, hasta = vals[0], vals[1]
         organismo, tipo, c1421, capn = vals[3], vals[4], vals[5], vals[6]
         hasta = "" if hasta == "vigente" else hasta
+        # Observación actual real (self._observaciones_periodos guarda un texto de
+        # relleno "(sin observaciones)" para mostrar en pantalla cuando está vacía,
+        # así que hay que traerla de nuevo tal cual está en la base para precargar
+        # el formulario -- si no, nunca se puede saber qué había ni borrarlo bien).
+        obs_actual = self._observaciones_periodos.get(str(pid), "")
+        if obs_actual == "(sin observaciones)":
+            obs_actual = ""
 
         def a_iso(d):
             if not d:
@@ -525,7 +532,9 @@ class App(tk.Tk):
              ("cuenta", "¿Cuenta para ascenso de grado 1421? (S/N):", "S" if c1421 == "SI" else "N"),
              ("tipo", "Tipo (texto libre, opcional):", tipo or ""),
              ("capn", "¿Cuenta para Antigüedad APN? (S/N):", "S" if capn == "SI" else "N"),
-             ("observaciones", "Observaciones (se agregan):", "")],
+             ("observaciones", "Observaciones:", obs_actual)],
+            ayuda="El campo Observaciones reemplaza el texto anterior por completo "
+                  "(dejalo vacío para borrarlo)."
         )
         if r is None:
             return
@@ -539,9 +548,8 @@ class App(tk.Tk):
             "cuenta_ascenso": int(r["cuenta"].strip().upper() in ("S", "SI", "SÍ", "1")),
             "tipo_prestacion": r["tipo"] or None,
             "suma_apn": int(r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")),
+            "observaciones": r["observaciones"],
         }
-        if r["observaciones"]:
-            cambios["observaciones"] = r["observaciones"]
         try:
             ops.modificar_periodo(pid, self.usuario, **cambios)
             self._cargar_ficha(self.n_doc_actual)
