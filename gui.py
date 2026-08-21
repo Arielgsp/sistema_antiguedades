@@ -273,7 +273,14 @@ class App(tk.Tk):
         self.lbl_ficha_sub.pack(anchor="w")
         self.lbl_ficha_sub2 = tk.Label(cab, text="", justify="left", anchor="w", bg=COLOR_BG, font=FONT_BASE, fg="#555")
         self.lbl_ficha_sub2.pack(anchor="w")
-        ttk.Button(cab, text="Editar Nivel / Grado / Dependencia", command=self.accion_editar_agente).pack(anchor="w", pady=(4, 0))
+        fila_cab_botones = tk.Frame(cab, bg=COLOR_BG)
+        fila_cab_botones.pack(anchor="w", pady=(4, 0))
+        ttk.Button(fila_cab_botones, text="Editar Nombre / Nivel / Grado / Dependencia",
+                   command=self.accion_editar_agente).pack(side="left")
+        self.btn_dar_baja = ttk.Button(fila_cab_botones, text="Dar de baja...", command=self.accion_dar_de_baja)
+        self.btn_dar_baja.pack(side="left", padx=(6, 0))
+        self.btn_reactivar = ttk.Button(fila_cab_botones, text="Reactivar", command=self.accion_reactivar)
+        self.btn_reactivar.pack(side="left", padx=(6, 0))
 
         fila2 = tk.Frame(der, bg=COLOR_BG)
         fila2.pack(fill="x", pady=4)
@@ -412,11 +419,18 @@ class App(tk.Tk):
         if not a:
             return
 
-        estado = "Activo" if a["activo"] else "INACTIVO"
+        estado = "Activo" if a["activo"] else "INACTIVO (dado de baja)"
         nivel_grado = f"{a['nivel_actual'] or '?'}-{a['grado_actual'] if a['grado_actual'] is not None else '?'}"
         self.lbl_ficha_titulo.config(text=f"{a['apellido_nombre']}")
         self.lbl_ficha_sub.config(
-            text=f"Documento: {a['n_doc']}     Nivel y Grado: {nivel_grado}     Estado: {estado}")
+            text=f"Documento: {a['n_doc']}     Nivel y Grado: {nivel_grado}     Estado: {estado}",
+            fg="#333" if a["activo"] else "#B00020")
+        if a["activo"]:
+            self.btn_dar_baja.state(["!disabled"])
+            self.btn_reactivar.state(["disabled"])
+        else:
+            self.btn_dar_baja.state(["disabled"])
+            self.btn_reactivar.state(["!disabled"])
         dependencia = a.get("dependencia_1421") or "-"
         self.lbl_ficha_sub2.config(text=f"Dependencia: {dependencia}")
 
@@ -695,13 +709,19 @@ class App(tk.Tk):
             return
         a = ops.obtener_agente(self.n_doc_actual)
         r = pedir_formulario(
-            self, "Editar Nivel / Grado / Dependencia",
-            [("nivel", "Nivel (A-F):", a["nivel_actual"] or ""),
+            self, "Editar Nombre / Nivel / Grado / Dependencia",
+            [("nombre", "Apellido y Nombre:", a["apellido_nombre"] or ""),
+             ("nivel", "Nivel (A-F):", a["nivel_actual"] or ""),
              ("grado", "Grado:", str(a["grado_actual"]) if a["grado_actual"] is not None else ""),
              ("dependencia", "Dependencia:", a.get("dependencia_1421") or "")],
-            ayuda="Estos son los datos informativos que se muestran en la ficha."
+            ayuda="Estos son los datos informativos que se muestran en la ficha. "
+                  "El Documento (DNI) no se puede editar acá: es la clave con la que "
+                  "está enganchado todo el historial del agente."
         )
         if r is None:
+            return
+        if not r["nombre"].strip():
+            messagebox.showerror("Error", "El apellido y nombre no puede quedar vacío.")
             return
         grado = None
         if r["grado"]:
@@ -711,7 +731,8 @@ class App(tk.Tk):
                 messagebox.showerror("Error", "El grado debe ser un número.")
                 return
         try:
-            ops.editar_datos_agente(self.n_doc_actual, self.usuario, nivel_actual=r["nivel"] or "",
+            ops.editar_datos_agente(self.n_doc_actual, self.usuario, apellido_nombre=r["nombre"],
+                                     nivel_actual=r["nivel"] or "",
                                      grado_actual=grado, dependencia_1421=r["dependencia"] or "")
             aplicado = ops.aplicar_default_titulacion_ab(self.n_doc_actual, self.usuario)
             self._cargar_ficha(self.n_doc_actual)
@@ -720,6 +741,46 @@ class App(tk.Tk):
                                  "la fecha de titulación como inicio de cómputo de grado.")
             else:
                 self.set_status("Datos del agente actualizados.")
+        except Exception as e:
+            messagebox.showerror("Error al guardar", str(e))
+
+    def accion_dar_de_baja(self):
+        if not self._requiere_agente():
+            return
+        nombre = self.lbl_ficha_titulo.cget("text")
+        if not messagebox.askyesno(
+                "Dar de baja",
+                f"¿Dar de baja a {nombre}?\n\n"
+                "No se borra nada: queda desactivado y deja de aparecer en búsquedas, "
+                "\"Ascensos por año\", el total de contratados activos y el Excel exportado. "
+                "Todo su historial (períodos, títulos) sigue intacto, y se puede reactivar "
+                "en cualquier momento."):
+            return
+        motivo = simpledialog.askstring(
+            "Motivo de la baja", "¿Por qué se da de baja? (ej. Renuncia, Cese)", parent=self)
+        if motivo is None:
+            return
+        try:
+            ops.dar_de_baja_agente(self.n_doc_actual, self.usuario, motivo)
+            self._cargar_ficha(self.n_doc_actual)
+            self._actualizar_total_activos()
+            self.set_status(f"{nombre} dado de baja. Sigue en la base, se puede reactivar cuando haga falta.")
+        except Exception as e:
+            messagebox.showerror("Error al guardar", str(e))
+
+    def accion_reactivar(self):
+        if not self._requiere_agente():
+            return
+        nombre = self.lbl_ficha_titulo.cget("text")
+        motivo = simpledialog.askstring(
+            "Motivo de la reactivación", "¿Por qué se reactiva? (opcional)", parent=self)
+        if motivo is None:
+            return
+        try:
+            ops.reactivar_agente(self.n_doc_actual, self.usuario, motivo)
+            self._cargar_ficha(self.n_doc_actual)
+            self._actualizar_total_activos()
+            self.set_status(f"{nombre} reactivado.")
         except Exception as e:
             messagebox.showerror("Error al guardar", str(e))
 

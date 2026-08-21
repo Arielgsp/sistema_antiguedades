@@ -234,10 +234,15 @@ def resumen_clasificacion_1421():
 
 
 def editar_datos_agente(n_doc: int, usuario: str, nivel_actual=None, grado_actual=None,
-                         dependencia_1421=None):
-    """Edita los datos informativos del agente (nivel, grado mostrado, dependencia).
-    Sólo actualiza los campos que se pasen (no None)."""
+                         dependencia_1421=None, apellido_nombre=None):
+    """Edita los datos informativos del agente (nombre, nivel, grado mostrado,
+    dependencia). Sólo actualiza los campos que se pasen (no None)."""
     campos = {}
+    if apellido_nombre is not None:
+        apellido_nombre = apellido_nombre.strip()
+        if not apellido_nombre:
+            raise ValueError("El apellido y nombre no puede quedar vacío.")
+        campos["apellido_nombre"] = apellido_nombre
     if nivel_actual is not None:
         campos["nivel_actual"] = nivel_actual or None
     if grado_actual is not None:
@@ -615,14 +620,67 @@ def crear_agente_manual(n_doc: int, apellido_nombre: str, usuario: str,
         existe = conn.execute("SELECT n_doc FROM agentes WHERE n_doc=?", (n_doc,)).fetchone()
         if existe:
             raise ValueError(f"Ya existe un agente con documento {n_doc}")
+        # vinculado_1421=1 y cuenta_1421=1: un agente cargado a mano en ESTE
+        # sistema (que es sólo para el Decreto 1421/02) corresponde por
+        # definición que cuente y aparezca en búsquedas/reportes por defecto.
+        # Antes quedaban en 0 (el default de la columna, pensado para la
+        # clasificación automática de los datos importados de Access) y el
+        # agente recién creado quedaba invisible en todos lados.
         conn.execute(
-            """INSERT INTO agentes (n_doc, apellido_nombre, nivel_actual, grado_actual, origen, usuario_modif)
-               VALUES (?, ?, ?, ?, 'manual', ?)""",
+            """INSERT INTO agentes (n_doc, apellido_nombre, nivel_actual, grado_actual, origen,
+                                     usuario_modif, vinculado_1421, cuenta_1421, motivo_clasif_1421)
+               VALUES (?, ?, ?, ?, 'manual', ?, 1, 1, 'Alta manual, cuenta para el Decreto 1421/02 por definición.')""",
             (n_doc, apellido_nombre, nivel_actual, grado_actual, usuario),
         )
         conn.execute("INSERT INTO config_agente (n_doc, usuario_modif) VALUES (?, ?)", (n_doc, usuario))
         registrar_auditoria(conn, "agentes", "INSERT", n_doc, None,
                              {"n_doc": n_doc, "apellido_nombre": apellido_nombre}, usuario)
+
+
+def dar_de_baja_agente(n_doc: int, usuario: str, motivo: str = ""):
+    """Soft-delete de un agente completo (ej. renuncia, cese). Nunca se
+    borra: sólo se desactiva (activo=0) y se saca de cuenta_1421=0 para que
+    deje de aparecer en búsquedas, "Ascensos por año", el total de
+    contratados activos y el Excel exportado -- exactamente igual que si ya
+    no estuviera, pero con todo su historial (períodos, títulos, auditoría)
+    intacto y consultable con "incluir inactivos". No toca sus períodos de
+    antigüedad: si además hace falta cerrar el cómputo en la fecha de baja,
+    eso se hace aparte, editando el período vigente."""
+    with Transaccion(f"dar_de_baja_agente_{n_doc}") as conn:
+        anterior = conn.execute("SELECT * FROM agentes WHERE n_doc=?", (n_doc,)).fetchone()
+        if not anterior:
+            raise ValueError(f"No existe el agente {n_doc}")
+        anterior = row_to_dict(anterior)
+        conn.execute(
+            """UPDATE agentes SET activo=0, cuenta_1421=0, motivo_clasif_1421=?, fecha_modif=?, usuario_modif=?
+               WHERE n_doc=?""",
+            (f"DADO DE BAJA: {motivo}" if motivo else "DADO DE BAJA.", datetime.now().isoformat(), usuario, n_doc),
+        )
+        registrar_auditoria(conn, "agentes", "SOFT_DELETE", n_doc,
+                             {"activo": anterior["activo"], "cuenta_1421": anterior["cuenta_1421"]},
+                             {"activo": 0, "cuenta_1421": 0, "motivo": motivo}, usuario)
+
+
+def reactivar_agente(n_doc: int, usuario: str, motivo: str = ""):
+    """Deshace dar_de_baja_agente: vuelve a activo=1 y cuenta_1421=1 (vuelve
+    a aparecer en búsquedas y reportes por defecto). No reconstruye el
+    motivo de clasificación 1421 original si lo tenía distinto (ej. un
+    agente importado con una explicación específica) -- deja una nota
+    genérica y, si hace falta el detalle exacto de antes, siempre se puede
+    reconstruir desde la auditoría."""
+    with Transaccion(f"reactivar_agente_{n_doc}") as conn:
+        anterior = conn.execute("SELECT * FROM agentes WHERE n_doc=?", (n_doc,)).fetchone()
+        if not anterior:
+            raise ValueError(f"No existe el agente {n_doc}")
+        anterior = row_to_dict(anterior)
+        conn.execute(
+            """UPDATE agentes SET activo=1, cuenta_1421=1, motivo_clasif_1421=?, fecha_modif=?, usuario_modif=?
+               WHERE n_doc=?""",
+            (f"REACTIVADO: {motivo}" if motivo else "REACTIVADO.", datetime.now().isoformat(), usuario, n_doc),
+        )
+        registrar_auditoria(conn, "agentes", "UPDATE", n_doc,
+                             {"activo": anterior["activo"], "cuenta_1421": anterior["cuenta_1421"]},
+                             {"activo": 1, "cuenta_1421": 1, "motivo": motivo}, usuario)
 
 
 def aplicar_regla_apn_por_tipo(usuario: str):
