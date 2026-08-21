@@ -244,7 +244,8 @@ class App(tk.Tk):
 
         self.var_incluir_baja = tk.BooleanVar(value=False)
         ttk.Checkbutton(izq, text="Incluir dados de baja (para reactivar)",
-                         variable=self.var_incluir_baja).pack(anchor="w", pady=(0, 4))
+                         variable=self.var_incluir_baja,
+                         command=self.accion_toggle_incluir_baja).pack(anchor="w", pady=(0, 4))
 
         cols = ("doc", "nombre")
         self.tree_agentes = ttk.Treeview(izq, columns=cols, show="headings", height=27, selectmode="browse")
@@ -383,9 +384,16 @@ class App(tk.Tk):
             messagebox.showinfo("Buscar", "Escribí un apellido o número de documento para buscar.")
             return
         incluir_baja = self.var_incluir_baja.get()
+        # Con el casillero tildado el universo es más grande (vinculados +
+        # dados de baja, ~387 hoy) que sin él (sólo los que cuentan, ~241) --
+        # el límite de "mostrar todos" tiene que cubrir ese universo más
+        # grande para no cortar resultados en silencio.
+        if inicial:
+            limite = 500 if incluir_baja else 250
+        else:
+            limite = 200 if incluir_baja else 100
         resultados = ops.buscar_agentes(texto, incluir_inactivos=True, solo_1421=True,
-                                         limite=250 if inicial else 100,
-                                         incluir_dados_de_baja=incluir_baja)
+                                         limite=limite, incluir_dados_de_baja=incluir_baja)
         self.tree_agentes.delete(*self.tree_agentes.get_children())
         for a in sorted(resultados, key=lambda x: x["apellido_nombre"]):
             tags = ("baja",) if not a["activo"] else ()
@@ -393,6 +401,15 @@ class App(tk.Tk):
                                       tags=tags)
         extra = " (incluye dados de baja)" if incluir_baja else ""
         self.set_status(f"{len(resultados)} agente(s) del Decreto 1421/02 mostrados{extra}.")
+
+    def accion_toggle_incluir_baja(self):
+        """Al tildar/destildar el casillero se repite la búsqueda sola, sin
+        esperar a que se apriete "Buscar" de nuevo. Si el buscador está
+        vacío, se comporta como "Mostrar todos" (no pide que se escriba
+        algo) -- así se puede ver a todos los dados de baja aunque no te
+        acuerdes el nombre exacto de la persona."""
+        texto = self.entry_buscar.get().strip()
+        self.accion_buscar(inicial=not texto)
 
     def accion_limpiar_busqueda(self):
         self.entry_buscar.delete(0, "end")
