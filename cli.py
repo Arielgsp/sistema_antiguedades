@@ -5,7 +5,7 @@ Ejecutar con:  python cli.py
 """
 
 import sys
-from datetime import date
+from datetime import date, datetime
 
 from db import init_db, verificar_integridad, DB_PATH, BACKUP_DIR, backup_antes_de_escribir
 import operaciones as ops
@@ -24,15 +24,18 @@ def pedir(msg, default=None, obligatorio=False):
 
 
 def pedir_fecha(msg, default=None, obligatorio=False):
+    """Pide una fecha tipeada en DD/MM/AAAA (mismo formato que usa la
+    ventana) y devuelve el formato interno AAAA-MM-DD (el que usa la base y
+    el motor de cálculo) -- quien llama a esta función nunca ve ni maneja
+    el formato tipeado, sólo el ISO."""
     while True:
-        val = pedir(msg + " (AAAA-MM-DD)", default, obligatorio)
+        val = pedir(msg + " (DD/MM/AAAA)", default, obligatorio)
         if val is None:
             return None
         try:
-            date.fromisoformat(val)
-            return val
+            return datetime.strptime(val, "%d/%m/%Y").date().isoformat()
         except ValueError:
-            print("  Formato inválido. Usar AAAA-MM-DD, ej: 2024-05-01")
+            print("  Formato inválido. Usar DD/MM/AAAA, ej: 01/05/2024")
 
 
 def pedir_si_no(msg, default=True):

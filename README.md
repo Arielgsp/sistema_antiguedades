@@ -75,7 +75,7 @@ agrego.
    título de grado, fija automáticamente la fecha de inicio de cómputo
    con esa fecha (con confirmación previa).
 5. **Ascensos por año con fecha de corte editable**: además del año, se
-   puede escribir cualquier fecha de corte (AAAA-MM-DD), no sólo 31/12.
+   puede escribir cualquier fecha de corte (DD/MM/AAAA), no sólo 31/12.
 6. **Fecha de corte automática**: ya no queda fija en una fecha
    hardcodeada. Por defecto es siempre "31/12 del año actual" y se
    actualiza sola. Se puede fijar una fecha manual desde el menú

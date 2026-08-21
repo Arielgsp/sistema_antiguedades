@@ -68,13 +68,23 @@ def pedir_formulario(parent, titulo, campos, ayuda=None):
 
 
 def fecha_valida(s):
+    """Valida el formato de una fecha TIPEADA por el usuario en un formulario: DD/MM/AAAA."""
     if not s:
         return True
     try:
-        date.fromisoformat(s)
+        datetime.strptime(s, "%d/%m/%Y")
         return True
     except ValueError:
         return False
+
+
+def fecha_iso(s):
+    """Convierte una fecha tipeada (DD/MM/AAAA) al formato interno AAAA-MM-DD
+    que usa la base y el motor de cálculo. Devuelve None si `s` está vacío.
+    Asume que ya se validó antes con fecha_valida()."""
+    if not s:
+        return None
+    return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
 
 
 def fecha_es(iso):
@@ -367,7 +377,7 @@ class App(tk.Tk):
 
         proy_frame = tk.Frame(der, bg=COLOR_BG)
         proy_frame.pack(anchor="w", fill="x", pady=(6, 0))
-        tk.Label(proy_frame, text="Proyectar antigüedad a otra fecha (AAAA-MM-DD):",
+        tk.Label(proy_frame, text="Proyectar antigüedad a otra fecha (DD/MM/AAAA):",
                  bg=COLOR_BG).pack(side="left")
         self.entry_proyeccion = ttk.Entry(proy_frame, width=12)
         self.entry_proyeccion.pack(side="left", padx=(4, 4))
@@ -508,7 +518,7 @@ class App(tk.Tk):
             return
         r = pedir_formulario(
             self, "Cargar período de antigüedad",
-            [("fecha_desde", "Fecha desde (AAAA-MM-DD):", ""),
+            [("fecha_desde", "Fecha desde (DD/MM/AAAA):", ""),
              ("fecha_hasta", "Fecha hasta (vacío = vigente):", ""),
              ("organismo", "Organismo / dependencia:", ""),
              ("cuenta", "¿Cuenta para ascenso de grado 1421? (S/N):", "S"),
@@ -520,15 +530,15 @@ class App(tk.Tk):
         if r is None:
             return
         if not fecha_valida(r["fecha_desde"]) or not r["fecha_desde"]:
-            messagebox.showerror("Error", "La fecha desde es obligatoria y debe tener formato AAAA-MM-DD.")
+            messagebox.showerror("Error", "La fecha desde es obligatoria y debe tener formato DD/MM/AAAA.")
             return
         if not fecha_valida(r["fecha_hasta"]):
-            messagebox.showerror("Error", "La fecha hasta debe tener formato AAAA-MM-DD (o vacía).")
+            messagebox.showerror("Error", "La fecha hasta debe tener formato DD/MM/AAAA (o vacía).")
             return
         cuenta = r["cuenta"].strip().upper() in ("S", "SI", "SÍ", "1")
         capn = r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")
         try:
-            ops.cargar_periodo(self.n_doc_actual, r["fecha_desde"], r["fecha_hasta"] or None,
+            ops.cargar_periodo(self.n_doc_actual, fecha_iso(r["fecha_desde"]), fecha_iso(r["fecha_hasta"]),
                                 r["organismo"], cuenta, r["observaciones"], self.usuario,
                                 tipo_prestacion=r["tipo"] or None, suma_apn=capn)
             self._cargar_ficha(self.n_doc_actual)
@@ -559,33 +569,29 @@ class App(tk.Tk):
         if obs_actual == "(sin observaciones)":
             obs_actual = ""
 
-        def a_iso(d):
-            if not d:
-                return ""
-            try:
-                return datetime.strptime(d, "%d/%m/%Y").date().isoformat()
-            except ValueError:
-                return d
+        # desde/hasta ya vienen en DD/MM/AAAA (formato de la tabla), que ahora
+        # es el mismo formato que se tipea en el formulario -- no hace falta
+        # convertir nada para precargarlo.
         r = pedir_formulario(
             self, f"Modificar período #{pid}",
-            [("fecha_desde", "Fecha desde:", a_iso(desde)),
-             ("fecha_hasta", "Fecha hasta (vacío = vigente):", a_iso(hasta)),
+            [("fecha_desde", "Fecha desde:", desde),
+             ("fecha_hasta", "Fecha hasta (vacío = vigente):", hasta),
              ("organismo", "Organismo:", organismo),
              ("cuenta", "¿Cuenta para ascenso de grado 1421? (S/N):", "S" if c1421 == "SI" else "N"),
              ("tipo", "Tipo (texto libre, opcional):", tipo or ""),
              ("capn", "¿Cuenta para Antigüedad APN? (S/N):", "S" if capn == "SI" else "N"),
              ("observaciones", "Observaciones:", obs_actual)],
-            ayuda="El campo Observaciones reemplaza el texto anterior por completo "
-                  "(dejalo vacío para borrarlo)."
+            ayuda="Formato de fechas: DD/MM/AAAA. El campo Observaciones reemplaza el "
+                  "texto anterior por completo (dejalo vacío para borrarlo)."
         )
         if r is None:
             return
         if not fecha_valida(r["fecha_desde"]) or not fecha_valida(r["fecha_hasta"]):
-            messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato de fecha inválido. Usar DD/MM/AAAA.")
             return
         cambios = {
-            "fecha_desde": r["fecha_desde"],
-            "fecha_hasta": r["fecha_hasta"] or None,
+            "fecha_desde": fecha_iso(r["fecha_desde"]),
+            "fecha_hasta": fecha_iso(r["fecha_hasta"]),
             "organismo": r["organismo"],
             "cuenta_ascenso": int(r["cuenta"].strip().upper() in ("S", "SI", "SÍ", "1")),
             "tipo_prestacion": r["tipo"] or None,
@@ -642,8 +648,8 @@ class App(tk.Tk):
             return
         r = pedir_formulario(
             self, f"Cortar período #{pid} por una licencia",
-            [("desde", "Licencia desde (AAAA-MM-DD):", ""),
-             ("hasta", "Licencia hasta (AAAA-MM-DD):", ""),
+            [("desde", "Licencia desde (DD/MM/AAAA):", ""),
+             ("hasta", "Licencia hasta (DD/MM/AAAA):", ""),
              ("motivo", "Motivo (ej. licencia extraordinaria sin goce, excedencia):", ""),
              ("capn", "¿La licencia cuenta para Antigüedad APN? (S/N):", "N")],
             ayuda="La licencia queda como una fila propia en la tabla, con ¿Grado 1421? = NO "
@@ -653,12 +659,13 @@ class App(tk.Tk):
         if r is None:
             return
         if not fecha_valida(r["desde"]) or not r["desde"] or not fecha_valida(r["hasta"]) or not r["hasta"]:
-            messagebox.showerror("Error", "Las dos fechas de la licencia son obligatorias, formato AAAA-MM-DD.")
+            messagebox.showerror("Error", "Las dos fechas de la licencia son obligatorias, formato DD/MM/AAAA.")
             return
         capn_licencia = r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")
         try:
             _, licencia_id, nuevo_id = ops.cortar_periodo_por_licencia(
-                pid, r["desde"], r["hasta"], self.usuario, r["motivo"], suma_apn_licencia=capn_licencia)
+                pid, fecha_iso(r["desde"]), fecha_iso(r["hasta"]), self.usuario, r["motivo"],
+                suma_apn_licencia=capn_licencia)
             self._cargar_ficha(self.n_doc_actual)
             if nuevo_id:
                 self.set_status(f"Período #{pid} cortado: licencia #{licencia_id} registrada, "
@@ -675,16 +682,16 @@ class App(tk.Tk):
         cfg = a["config"] or {}
         r = pedir_formulario(
             self, "Configuración de cómputo de grado",
-            [("inicio", "Fecha desde la que se cuenta el grado (override):", cfg.get("fecha_inicio_conteo_grado") or ""),
-             ("cierre", "Fecha de cierre de cómputo:", cfg.get("fecha_cierre_conteo") or ""),
+            [("inicio", "Fecha desde la que se cuenta el grado (override):", fecha_es(cfg.get("fecha_inicio_conteo_grado"))),
+             ("cierre", "Fecha de cierre de cómputo:", fecha_es(cfg.get("fecha_cierre_conteo"))),
              ("grado_base", "Grado base de partida:", str(cfg.get("grado_base", 0) or 0)),
              ("observaciones", "Observaciones:", cfg.get("observaciones") or "")],
-            ayuda="Formato de fechas: AAAA-MM-DD. Dejá vacío lo que quieras que se calcule automáticamente."
+            ayuda="Formato de fechas: DD/MM/AAAA. Dejá vacío lo que quieras que se calcule automáticamente."
         )
         if r is None:
             return
         if not fecha_valida(r["inicio"]) or not fecha_valida(r["cierre"]):
-            messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato de fecha inválido. Usar DD/MM/AAAA.")
             return
         try:
             grado_base = int(r["grado_base"]) if r["grado_base"] else 0
@@ -693,8 +700,8 @@ class App(tk.Tk):
             return
         try:
             ops.set_config_agente(self.n_doc_actual, self.usuario,
-                                   fecha_inicio_conteo_grado=r["inicio"] or "",
-                                   fecha_cierre_conteo=r["cierre"] or "",
+                                   fecha_inicio_conteo_grado=fecha_iso(r["inicio"]) or "",
+                                   fecha_cierre_conteo=fecha_iso(r["cierre"]) or "",
                                    grado_base=grado_base, observaciones=r["observaciones"])
             self._cargar_ficha(self.n_doc_actual)
             self.set_status("Configuración guardada.")
@@ -711,12 +718,12 @@ class App(tk.Tk):
             return
         fecha_txt = self.entry_proyeccion.get().strip()
         if not fecha_txt:
-            messagebox.showerror("Error", "Escribí una fecha (AAAA-MM-DD) para proyectar.")
+            messagebox.showerror("Error", "Escribí una fecha (DD/MM/AAAA) para proyectar.")
             return
         if not fecha_valida(fecha_txt):
-            messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato de fecha inválido. Usar DD/MM/AAAA.")
             return
-        fecha = date.fromisoformat(fecha_txt)
+        fecha = date.fromisoformat(fecha_iso(fecha_txt))
         calc = ops.calcular_antiguedad_agente(self.n_doc_actual, fecha)
         r = ops.evaluar_ascenso_agente(self.n_doc_actual, fecha.year, fecha_corte=fecha)
 
@@ -726,7 +733,7 @@ class App(tk.Tk):
             resultado_grado = "No suma un grado nuevo en esta evaluación."
 
         self.lbl_proyeccion.config(
-            text=f"Proyección al {fecha_es(fecha_txt)} — "
+            text=f"Proyección al {fecha_txt} — "
                  f"1421: {calc['antiguedad_texto']} (grados: {r['grados_acumulados']})  |  "
                  f"APN: {calc['antiguedad_apn_texto']}  |  {resultado_grado}"
         )
@@ -820,18 +827,18 @@ class App(tk.Tk):
             self, "Editar título de grado",
             [("titulo", "Título:", actual.get("titulo") or ""),
              ("institucion", "Institución:", actual.get("institucion") or ""),
-             ("fecha_titulacion", "Fecha de titulación (AAAA-MM-DD):", actual.get("fecha_titulacion") or ""),
-             ("fecha_egreso", "Fecha de egreso (AAAA-MM-DD):", actual.get("fecha_egreso") or "")],
+             ("fecha_titulacion", "Fecha de titulación (DD/MM/AAAA):", fecha_es(actual.get("fecha_titulacion"))),
+             ("fecha_egreso", "Fecha de egreso (DD/MM/AAAA):", fecha_es(actual.get("fecha_egreso")))],
         )
         if r is None:
             return
         if not fecha_valida(r["fecha_titulacion"]) or not fecha_valida(r["fecha_egreso"]):
-            messagebox.showerror("Error", "Formato de fecha inválido. Usar AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato de fecha inválido. Usar DD/MM/AAAA.")
             return
         try:
             ops.editar_titulo_grado(self.n_doc_actual, self.usuario, titulo=r["titulo"],
-                                     institucion=r["institucion"], fecha_titulacion=r["fecha_titulacion"] or None,
-                                     fecha_egreso=r["fecha_egreso"] or None)
+                                     institucion=r["institucion"], fecha_titulacion=fecha_iso(r["fecha_titulacion"]),
+                                     fecha_egreso=fecha_iso(r["fecha_egreso"]))
             aplicado = ops.aplicar_default_titulacion_ab(self.n_doc_actual, self.usuario)
             self._cargar_ficha(self.n_doc_actual)
             if aplicado:
@@ -908,9 +915,9 @@ class App(tk.Tk):
     def _armar_tab_ascensos(self, frame):
         top = ttk.Frame(frame)
         top.pack(fill="x", pady=8)
-        ttk.Label(top, text="Fecha de corte a evaluar (AAAA-MM-DD):").pack(side="left", padx=(0, 4))
+        ttk.Label(top, text="Fecha de corte a evaluar (DD/MM/AAAA):").pack(side="left", padx=(0, 4))
         self.entry_fecha_corte_ascensos = ttk.Entry(top, width=12)
-        self.entry_fecha_corte_ascensos.insert(0, f"{self.fecha_corte_oficial.year}-12-31")
+        self.entry_fecha_corte_ascensos.insert(0, f"31/12/{self.fecha_corte_oficial.year}")
         self.entry_fecha_corte_ascensos.pack(side="left")
         ttk.Button(top, text="Calcular ascensos", command=self.accion_calcular_ascensos).pack(side="left", padx=8)
         ttk.Button(top, text="Exportar a Excel", command=self.accion_exportar_excel).pack(side="left")
@@ -936,12 +943,12 @@ class App(tk.Tk):
     def accion_calcular_ascensos(self):
         fecha_corte_txt = self.entry_fecha_corte_ascensos.get().strip()
         if not fecha_corte_txt or not fecha_valida(fecha_corte_txt):
-            messagebox.showerror("Error", "Ingresá una fecha de corte válida, formato AAAA-MM-DD.")
+            messagebox.showerror("Error", "Ingresá una fecha de corte válida, formato DD/MM/AAAA.")
             return
-        fecha_corte = date.fromisoformat(fecha_corte_txt)
+        fecha_corte = date.fromisoformat(fecha_iso(fecha_corte_txt))
         anio = fecha_corte.year
 
-        self.set_status(f"Calculando ascensos al {fecha_es(fecha_corte_txt)}... (puede tardar unos segundos)")
+        self.set_status(f"Calculando ascensos al {fecha_corte_txt}... (puede tardar unos segundos)")
         self.update_idletasks()
         resultados = ops.listar_ascensos_anio(anio, fecha_corte=fecha_corte)
         self.tree_ascensos.delete(*self.tree_ascensos.get_children())
@@ -987,19 +994,19 @@ class App(tk.Tk):
             "Fecha de corte",
             f"Fecha actual: {fecha_es(self.fecha_corte_oficial.isoformat())}\n\n"
             "Ingresá la fecha a la que se debe calcular la antigüedad en todas\n"
-            "las fichas (AAAA-MM-DD). Por defecto es automática (31/12 del año\n"
+            "las fichas (DD/MM/AAAA). Por defecto es automática (31/12 del año\n"
             "actual) y se actualiza sola cada año; esto fija una fecha manual\n"
             "hasta que elijas 'Volver a fecha de corte automática'.",
             parent=self)
         if not nueva:
             return
         if not fecha_valida(nueva):
-            messagebox.showerror("Error", "Formato inválido. Usar AAAA-MM-DD.")
+            messagebox.showerror("Error", "Formato inválido. Usar DD/MM/AAAA.")
             return
-        ops.set_fecha_corte_oficial(nueva, self.usuario)
+        ops.set_fecha_corte_oficial(fecha_iso(nueva), self.usuario)
         self.fecha_corte_oficial = ops.obtener_fecha_corte_oficial()
         self._actualizar_encabezado_fecha_corte()
-        messagebox.showinfo("Listo", f"Fecha de corte actualizada a {fecha_es(nueva)}.\n"
+        messagebox.showinfo("Listo", f"Fecha de corte actualizada a {nueva}.\n"
                              "Volvé a seleccionar un agente para ver los totales recalculados.")
 
     def accion_fecha_corte_automatica(self):
