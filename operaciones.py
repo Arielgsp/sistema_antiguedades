@@ -66,7 +66,12 @@ def volver_fecha_corte_automatica(usuario: str):
                                  row_to_dict(anterior), None, usuario)
 
 
-def buscar_agentes(texto: str, incluir_inactivos=False, limite=30, solo_1421=True):
+def buscar_agentes(texto: str, incluir_inactivos=False, limite=30, solo_1421=True,
+                    incluir_dados_de_baja=False):
+    """incluir_dados_de_baja=True amplía el universo 1421 (solo_1421=True) para
+    que también aparezcan los agentes dados de baja (cuenta_1421=0 pero
+    vinculado_1421=1) -- sin volver a traer a los ~750 agentes que nunca
+    estuvieron vinculados al Decreto 1421/02 (esos siguen ocultos)."""
     conn = get_connection()
     try:
         texto = f"%{texto.strip()}%"
@@ -75,7 +80,7 @@ def buscar_agentes(texto: str, incluir_inactivos=False, limite=30, solo_1421=Tru
         if not incluir_inactivos:
             query += " AND activo=1"
         if solo_1421:
-            query += " AND cuenta_1421=1"
+            query += " AND vinculado_1421=1" if incluir_dados_de_baja else " AND cuenta_1421=1"
         query += " ORDER BY apellido_nombre LIMIT ?"
         params.append(limite)
         rows = conn.execute(query, params).fetchall()

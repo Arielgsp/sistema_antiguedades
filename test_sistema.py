@@ -250,6 +250,28 @@ assert any(r["n_doc"] == TEST_DOC for r in busqueda_completa), (
 )
 print("OK: dar de baja saca al agente de las búsquedas por defecto sin borrar nada")
 
+# Con incluir_dados_de_baja=True SÍ debe aparecer (para poder encontrarlo y
+# reactivarlo), pero sin volver a traer a los agentes que nunca estuvieron
+# vinculados al Decreto 1421/02 (vinculado_1421=0).
+busqueda_con_baja = ops.buscar_agentes("RENOMBRADA", incluir_inactivos=True, solo_1421=True,
+                                        incluir_dados_de_baja=True)
+assert any(r["n_doc"] == TEST_DOC for r in busqueda_con_baja), (
+    "Con incluir_dados_de_baja=True el agente dado de baja debe poder encontrarse (si no, "
+    "el botón 'Reactivar' es inalcanzable desde la búsqueda)"
+)
+conn = get_connection()
+sin_vincular = conn.execute("SELECT n_doc FROM agentes WHERE vinculado_1421=0 LIMIT 1").fetchone()
+conn.close()
+if sin_vincular:
+    n_doc_ruido = sin_vincular["n_doc"]
+    resultado_ruido = ops.buscar_agentes(str(n_doc_ruido), incluir_inactivos=True, solo_1421=True,
+                                          incluir_dados_de_baja=True)
+    assert not any(r["n_doc"] == n_doc_ruido for r in resultado_ruido), (
+        "incluir_dados_de_baja=True no debería volver a traer a los agentes nunca vinculados a 1421"
+    )
+print("OK: incluir_dados_de_baja=True encuentra al agente dado de baja sin traer de vuelta "
+      "a los no vinculados a 1421")
+
 ops.reactivar_agente(TEST_DOC, "test_script")
 a_reactivado = ops.obtener_agente(TEST_DOC)
 assert a_reactivado["activo"] == 1 and a_reactivado["cuenta_1421"] == 1
