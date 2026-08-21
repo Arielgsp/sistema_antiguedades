@@ -217,6 +217,44 @@ try:
 except ValueError:
     print("OK: rechaza correctamente una licencia que arranca en la fecha de inicio del período")
 
+# 16) Regresión: un agente creado a mano debe quedar cuenta_1421=1 (visible
+# en búsquedas/reportes por defecto). Hasta agosto 2026 quedaba en 0 y el
+# agente recién creado era invisible en todo el sistema.
+linea("16) Un agente creado a mano queda cuenta_1421=1 (visible por defecto)")
+a_test = ops.obtener_agente(TEST_DOC)
+assert a_test["cuenta_1421"] == 1, "Un agente creado a mano debe quedar cuenta_1421=1, no invisible"
+resultado_busqueda = ops.buscar_agentes("PRUEBA, Test", incluir_inactivos=True, solo_1421=True)
+assert any(r["n_doc"] == TEST_DOC for r in resultado_busqueda), (
+    "El agente de prueba (creado a mano) no aparece en la búsqueda por defecto -- "
+    "un agente cargado a mano no debería quedar invisible en el sistema."
+)
+print("OK: un agente creado a mano aparece en las búsquedas por defecto")
+
+# 17) Editar nombre, dar de baja y reactivar un agente (soft-delete completo,
+# no sólo de un período).
+linea("17) Editar nombre, dar de baja y reactivar un agente")
+ops.editar_datos_agente(TEST_DOC, "test_script", apellido_nombre="PRUEBA RENOMBRADA, Test")
+assert ops.obtener_agente(TEST_DOC)["apellido_nombre"] == "PRUEBA RENOMBRADA, Test"
+
+ops.dar_de_baja_agente(TEST_DOC, "test_script", "Renuncia de prueba")
+a_baja = ops.obtener_agente(TEST_DOC)
+assert a_baja["activo"] == 0 and a_baja["cuenta_1421"] == 0
+busqueda_tras_baja = ops.buscar_agentes("RENOMBRADA", incluir_inactivos=True, solo_1421=True)
+assert not any(r["n_doc"] == TEST_DOC for r in busqueda_tras_baja), (
+    "El agente dado de baja no debería aparecer en la búsqueda por defecto"
+)
+# Sigue existiendo, con todo su historial intacto, buscando el universo completo.
+busqueda_completa = ops.buscar_agentes("RENOMBRADA", incluir_inactivos=True, solo_1421=False)
+assert any(r["n_doc"] == TEST_DOC for r in busqueda_completa), (
+    "El agente dado de baja debe seguir existiendo (nunca se borra)"
+)
+print("OK: dar de baja saca al agente de las búsquedas por defecto sin borrar nada")
+
+ops.reactivar_agente(TEST_DOC, "test_script")
+a_reactivado = ops.obtener_agente(TEST_DOC)
+assert a_reactivado["activo"] == 1 and a_reactivado["cuenta_1421"] == 1
+print("OK: reactivar deshace la baja correctamente")
+
 # Limpieza del agente de prueba (dejamos la base real intacta)
 linea("Limpieza: eliminando agente de prueba")
 conn = get_connection()
