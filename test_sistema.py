@@ -173,17 +173,28 @@ print("OK: la fecha efectiva sigue a la fecha de corte elegida, no queda fija en
 # uno más ni uno menos, comparado contra una cuenta manual independiente.
 linea("15) Cortar período por una licencia (excluir un tramo intermedio)")
 pid_corte = ops.cargar_periodo(TEST_DOC, "2020-01-01", "2025-06-15", "Organismo corte", True, "", "test_script")
-orig_id, nuevo_id = ops.cortar_periodo_por_licencia(
+orig_id, licencia_id, nuevo_id = ops.cortar_periodo_por_licencia(
     pid_corte, "2021-04-01", "2022-12-31", "test_script", "licencia extraordinaria sin goce")
 assert nuevo_id is not None, "Debería haber creado un período nuevo tras la licencia"
+assert licencia_id is not None, "Debería haber creado la licencia como período propio"
 
 conn = get_connection()
 p1 = conn.execute("SELECT fecha_desde, fecha_hasta FROM periodos_antiguedad WHERE id=?", (orig_id,)).fetchone()
 p2 = conn.execute("SELECT fecha_desde, fecha_hasta FROM periodos_antiguedad WHERE id=?", (nuevo_id,)).fetchone()
+p_lic = conn.execute(
+    "SELECT fecha_desde, fecha_hasta, cuenta_ascenso, suma_apn, activo FROM periodos_antiguedad WHERE id=?",
+    (licencia_id,)).fetchone()
 conn.close()
 assert p1["fecha_hasta"] == "2021-03-31", f"Fecha hasta del original mal: {p1['fecha_hasta']}"
 assert p2["fecha_desde"] == "2023-01-01", f"Fecha desde del nuevo mal: {p2['fecha_desde']}"
 assert p2["fecha_hasta"] == "2025-06-15", f"Fecha hasta del nuevo mal: {p2['fecha_hasta']}"
+# La licencia debe quedar VISIBLE como período propio (no como un hueco
+# invisible), activa, y marcada para que no cuente para el ascenso de grado.
+assert p_lic["activo"] == 1, "La licencia debe quedar como fila activa, visible en la tabla"
+assert p_lic["fecha_desde"] == "2021-04-01" and p_lic["fecha_hasta"] == "2022-12-31"
+assert p_lic["cuenta_ascenso"] == 0, "La licencia nunca debe contar para el ascenso de grado 1421"
+assert p_lic["suma_apn"] == 0, "Por defecto la licencia no debe sumar para APN (se puede ajustar después)"
+print("OK: la licencia queda registrada como período propio y visible, sin contar para el ascenso")
 
 dias_tramo1 = (date(2021, 3, 31) - date(2020, 1, 1)).days + 1
 dias_tramo2 = (date(2025, 6, 15) - date(2023, 1, 1)).days + 1

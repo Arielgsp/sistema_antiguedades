@@ -472,21 +472,27 @@ def desactivar_periodo(periodo_id: int, usuario: str, motivo: str = ""):
 
 
 def cortar_periodo_por_licencia(periodo_id: int, licencia_desde: str, licencia_hasta: str,
-                                 usuario: str, motivo: str = ""):
-    """Divide un período existente en dos, excluyendo un tramo intermedio
-    (licencia extraordinaria sin goce, excedencia, etc.) que no debe contar
-    para el cómputo de antigüedad.
+                                 usuario: str, motivo: str = "", suma_apn_licencia: bool = False):
+    """Divide un período existente en tres tramos para representar una
+    licencia (extraordinaria sin goce, excedencia, etc.) que corta el
+    período: el tramo antes de la licencia, la licencia en sí (que queda
+    como una fila visible en la tabla, no como un hueco invisible), y el
+    tramo posterior si corresponde.
 
     No cambia ningún cálculo: el motor de antigüedad (antiguedad.py) ya
-    suma correctamente varios períodos separados por unión de intervalos.
-    Esto sólo automatiza la carga: acorta el período existente hasta el
-    día anterior a la licencia, y (si corresponde) crea uno nuevo desde el
-    día siguiente a la licencia hasta donde llegaba el original, con los
-    mismos datos (organismo, cuenta_ascenso, tipo, APN).
+    suma correctamente varios períodos por unión de intervalos. Esto sólo
+    automatiza la carga de los tramos, incluida la fila de la licencia,
+    marcada con cuenta_ascenso=0 siempre (nunca cuenta para el ascenso de
+    grado 1421) y suma_apn según `suma_apn_licencia` -- por defecto NO,
+    porque depende del tipo de licencia (una excedencia generalmente no
+    computa antigüedad de ningún tipo, pero una licencia por un cargo de
+    mayor jerarquía en el mismo organismo sí puede corresponder que sume
+    para APN; ese criterio hay que definirlo caso por caso, y siempre se
+    puede ajustar después con "Modificar seleccionado").
 
-    Devuelve (periodo_id_original, periodo_id_nuevo_o_None). Es None si la
-    licencia llega justo hasta el final del período (no hace falta un
-    tramo posterior, sólo se acorta el original).
+    Devuelve (periodo_id_original, periodo_id_licencia, periodo_id_nuevo_o_None).
+    El tercero es None si la licencia llega justo hasta el final del
+    período (no hace falta un tramo posterior).
     """
     d_licencia = _parse_fecha(licencia_desde)
     h_licencia = _parse_fecha(licencia_hasta)
@@ -517,6 +523,7 @@ def cortar_periodo_por_licencia(periodo_id: int, licencia_desde: str, licencia_h
         nueva_desde_siguiente = h_licencia + timedelta(days=1)
         detalle_motivo = f"licencia {licencia_desde} a {licencia_hasta}" + (f": {motivo}" if motivo else "")
 
+        # 1) Acortar el período original hasta el día anterior a la licencia.
         conn.execute(
             "UPDATE periodos_antiguedad SET fecha_hasta=?, fecha_modif=?, usuario_modif=? WHERE id=?",
             (nueva_hasta_original, datetime.now().isoformat(), usuario, periodo_id),
@@ -525,6 +532,22 @@ def cortar_periodo_por_licencia(periodo_id: int, licencia_desde: str, licencia_h
                              {"fecha_hasta": original["fecha_hasta"]},
                              {"fecha_hasta": nueva_hasta_original, "motivo": f"cortado por {detalle_motivo}"},
                              usuario)
+
+        # 2) Crear la licencia como fila propia y visible (no cuenta para
+        # ascenso de grado; APN según lo que se haya indicado).
+        cur_lic = conn.execute(
+            """INSERT INTO periodos_antiguedad
+                   (n_doc, fecha_desde, fecha_hasta, organismo, cuenta_ascenso, observaciones,
+                    origen, usuario_carga, tipo_prestacion, suma_apn)
+               VALUES (?, ?, ?, ?, 0, ?, 'manual', ?, 'Licencia', ?)""",
+            (original["n_doc"], licencia_desde, licencia_hasta, original["organismo"],
+             motivo or "Licencia.", usuario, int(suma_apn_licencia)),
+        )
+        licencia_id = cur_lic.lastrowid
+        registrar_auditoria(conn, "periodos_antiguedad", "INSERT", licencia_id, None,
+                             {"n_doc": original["n_doc"], "fecha_desde": licencia_desde,
+                              "fecha_hasta": licencia_hasta, "cuenta_ascenso": 0,
+                              "suma_apn": int(suma_apn_licencia), "corte_de": periodo_id}, usuario)
 
         nuevo_id = None
         # Si la licencia no llega hasta el final del período (o el período era
@@ -545,7 +568,7 @@ def cortar_periodo_por_licencia(periodo_id: int, licencia_desde: str, licencia_h
                                  {"n_doc": original["n_doc"], "fecha_desde": nueva_desde_siguiente.isoformat(),
                                   "continuacion_de": periodo_id}, usuario)
 
-        return periodo_id, nuevo_id
+        return periodo_id, licencia_id, nuevo_id
 
 
 def set_config_agente(n_doc: int, usuario: str, fecha_inicio_conteo_grado: Optional[str] = None,

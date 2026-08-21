@@ -591,10 +591,11 @@ class App(tk.Tk):
             messagebox.showerror("Error al guardar", str(e))
 
     def accion_cortar_periodo(self):
-        """Divide el período seleccionado en dos, excluyendo un tramo
-        intermedio (licencia sin goce, excedencia, etc.). No cambia el
-        cálculo de antigüedad: sólo automatiza la carga de los dos tramos
-        que ya se podían cargar a mano."""
+        """Divide el período seleccionado en tramos, dejando la licencia
+        (licencia sin goce, excedencia, etc.) como una fila propia y
+        visible en la tabla -- no como un hueco invisible. No cambia el
+        cálculo de antigüedad: la fila de la licencia queda marcada para
+        que no cuente."""
         pid = self._periodo_seleccionado()
         if pid is None:
             return
@@ -602,23 +603,27 @@ class App(tk.Tk):
             self, f"Cortar período #{pid} por una licencia",
             [("desde", "Licencia desde (AAAA-MM-DD):", ""),
              ("hasta", "Licencia hasta (AAAA-MM-DD):", ""),
-             ("motivo", "Motivo (ej. licencia extraordinaria sin goce, excedencia):", "")],
-            ayuda="El tramo de la licencia queda excluido del cómputo de antigüedad. "
-                  "El período se acorta hasta el día anterior, y se crea uno nuevo desde "
-                  "el día siguiente hasta donde llegaba el original."
+             ("motivo", "Motivo (ej. licencia extraordinaria sin goce, excedencia):", ""),
+             ("capn", "¿La licencia cuenta para Antigüedad APN? (S/N):", "N")],
+            ayuda="La licencia queda como una fila propia en la tabla, con ¿Grado 1421? = NO "
+                  "siempre. El período se acorta hasta el día anterior a la licencia, y se crea "
+                  "uno nuevo desde el día siguiente hasta donde llegaba el original."
         )
         if r is None:
             return
         if not fecha_valida(r["desde"]) or not r["desde"] or not fecha_valida(r["hasta"]) or not r["hasta"]:
             messagebox.showerror("Error", "Las dos fechas de la licencia son obligatorias, formato AAAA-MM-DD.")
             return
+        capn_licencia = r["capn"].strip().upper() in ("S", "SI", "SÍ", "1")
         try:
-            _, nuevo_id = ops.cortar_periodo_por_licencia(pid, r["desde"], r["hasta"], self.usuario, r["motivo"])
+            _, licencia_id, nuevo_id = ops.cortar_periodo_por_licencia(
+                pid, r["desde"], r["hasta"], self.usuario, r["motivo"], suma_apn_licencia=capn_licencia)
             self._cargar_ficha(self.n_doc_actual)
             if nuevo_id:
-                self.set_status(f"Período #{pid} cortado. Nuevo período #{nuevo_id} creado tras la licencia.")
+                self.set_status(f"Período #{pid} cortado: licencia #{licencia_id} registrada, "
+                                 f"continúa en el período #{nuevo_id}.")
             else:
-                self.set_status(f"Período #{pid} acortado hasta el día anterior a la licencia.")
+                self.set_status(f"Período #{pid} acortado; licencia #{licencia_id} registrada hasta el final.")
         except Exception as e:
             messagebox.showerror("Error al cortar el período", str(e))
 
