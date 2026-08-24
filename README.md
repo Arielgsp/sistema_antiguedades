@@ -83,8 +83,12 @@ agrego.
    automática cuando se quiera.
 7. Se quitó la línea "Contrato 1421 vigente" de la ficha y el comentario
    sobre la antigüedad ANSES.
-8. **Usuario recordado por PC**: el nombre ingresado se guarda en un
-   archivo local (`data/usuario_local.txt`, NO en la base compartida).
+8. **Usuario recordado por PC**: el nombre ingresado se guarda en la
+   carpeta personal del usuario del sistema operativo (NO al lado del
+   programa ni en la base compartida) -- así, si el programa vive en una
+   carpeta de red usada por varias PCs, cada una sigue recordando su
+   propio nombre por separado, en vez de que la primera persona que
+   entra le termine poniendo su nombre a todas las demás.
    La próxima vez saluda "Hola, [nombre]. ¡Bienvenido/a!" con botones
    "Ingresar" y "Cambiar usuario" (también disponible desde el menú
    Sistema en cualquier momento).
