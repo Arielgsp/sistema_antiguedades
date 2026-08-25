@@ -9,6 +9,7 @@ from datetime import date, datetime
 
 from db import init_db, verificar_integridad, DB_PATH, BACKUP_DIR, backup_antes_de_escribir
 import operaciones as ops
+import exportar
 
 
 def pedir(msg, default=None, obligatorio=False):
@@ -344,6 +345,13 @@ def main():
         print("Se recomienda restaurar desde el último backup antes de continuar.")
         if not pedir_si_no("¿Continuar de todos modos?", default=False):
             sys.exit(1)
+
+    try:
+        carpeta = exportar.backup_csv_si_corresponde()
+        if carpeta:
+            print(f"Backup CSV automático generado: {carpeta}")
+    except Exception:
+        pass
 
     acciones = {
         "1": menu_ver_agente,

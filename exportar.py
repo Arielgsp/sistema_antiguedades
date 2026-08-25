@@ -124,6 +124,32 @@ def exportar_backup_csv():
     return carpeta
 
 
+def ultimo_backup_csv():
+    """Fecha (datetime) del backup_csv más reciente que exista en /exports,
+    o None si todavía no se generó ninguno."""
+    carpetas = sorted(EXPORT_DIR.glob("backup_csv_*"))
+    if not carpetas:
+        return None
+    ultima = carpetas[-1].name  # "backup_csv_AAAAMMDD_HHMMSS" ordena bien como texto
+    try:
+        return datetime.strptime(ultima, "backup_csv_%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+
+def backup_csv_si_corresponde(dias: int = 7):
+    """Genera un backup_csv automático si no hay ninguno o si el último ya
+    tiene más de `dias` días. Pensado para llamarse solo, en cada arranque
+    del programa (gui.py / cli.py) -- así no depende de que alguien se
+    acuerde de correrlo a mano, ni de configurar un programador de tareas
+    del sistema operativo (que además sería distinto en Windows y Mac).
+    Devuelve la carpeta generada, o None si no hacía falta generar nada."""
+    ultimo = ultimo_backup_csv()
+    if ultimo and (datetime.now() - ultimo).days < dias:
+        return None
+    return exportar_backup_csv()
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso: python exportar.py ascensos <anio>  |  python exportar.py backup_csv")
