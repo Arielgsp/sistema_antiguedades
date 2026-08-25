@@ -1066,6 +1066,12 @@ def main():
     if not ok:
         messagebox.showwarning("Atención", f"La base reporta un problema de integridad:\n{detalle}\n"
                                 "Se recomienda restaurar desde el último backup.")
+    try:
+        carpeta = exportar.backup_csv_si_corresponde()
+        if carpeta:
+            app.set_status(f"{app.status.get()}  |  Backup CSV automático generado (exports/{carpeta.name}).")
+    except Exception:
+        pass
     app.mainloop()
 
 
