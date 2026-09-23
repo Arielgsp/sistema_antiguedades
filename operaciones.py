@@ -166,7 +166,8 @@ def evaluar_ascenso_agente(n_doc: int, anio: int, persistir=False, usuario=None,
         )
         for p in agente["periodos"]
     ]
-    resultado = evaluar_agente_anio(periodos, anio, inicio, cierre, grado_base, fecha_corte=fecha_corte)
+    resultado = evaluar_agente_anio(periodos, anio, inicio, cierre, grado_base, fecha_corte=fecha_corte,
+                                    grado_cargado=agente["grado_actual"])
     resultado["n_doc"] = n_doc
     resultado["apellido_nombre"] = agente["apellido_nombre"]
 
@@ -184,6 +185,13 @@ def evaluar_ascenso_agente(n_doc: int, anio: int, persistir=False, usuario=None,
             )
             registrar_auditoria(conn, "calculos_ascenso", "INSERT", cur.lastrowid, None, resultado, usuario)
     return resultado
+
+
+def grado_segun_antiguedad_hoy(n_doc: int):
+    """Grado que le corresponde hoy por antigüedad: el del último 31/12 cuyo
+    ascenso ya rige (los ascensos tienen efecto el 1/1 siguiente)."""
+    r = evaluar_ascenso_agente(n_doc, date.today().year - 1)
+    return r["grados_acumulados"] if r else None
 
 
 def listar_ascensos_anio(anio: int, solo_activos=True, solo_1421=True, fecha_corte: Optional[date] = None):

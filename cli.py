@@ -83,6 +83,10 @@ def mostrar_ficha(n_doc):
     print(f" {a['apellido_nombre']}  —  Documento: {a['n_doc']}")
     print("=" * 70)
     print(f" Activo: {'Sí' if a['activo'] else 'No'}   Nivel actual: {a['nivel_actual']}   Grado actual: {a['grado_actual']}")
+    if a["activo"] and a["grado_actual"] is not None:
+        corresponde = ops.grado_segun_antiguedad_hoy(n_doc)
+        if corresponde is not None and corresponde != a["grado_actual"]:
+            print(f" ATENCIÓN: tiene cargado grado {a['grado_actual']}, pero por antigüedad hoy le corresponde {corresponde}.")
 
     cfg = a["config"] or {}
     print(f"\n Configuración de cómputo de grado:")
@@ -262,6 +266,8 @@ def menu_ascensos_anio():
         print(f"  {r['apellido_nombre']} (Doc {r['n_doc']}): "
               f"{r['grados_anio_anterior']} -> {r['grados_acumulados']} grado(s) "
               f"(+{r['grados_nuevos']})  |  antigüedad: {r['antiguedad_computable_texto']}")
+        if r["observacion"]:
+            print(f"      ATENCIÓN: {r['observacion']}")
     print(f"\nTotal: {len(resultados)} agentes.\n")
 
     guardar = pedir_si_no("¿Guardar esta corrida en el historial de cálculos (auditable)?", default=True)

@@ -373,6 +373,40 @@ menú Sistema → "Recalcular reglas automáticas..." (ahora incluye las
 tres reglas: fecha de titulación para A/B, tipo de período para el
 ascenso 1421, y tipo de período para APN).
 
+## El ascenso se compara contra el grado cargado (septiembre 2026)
+
+**Bug corregido**: el sistema decidía el ascenso comparando el grado que
+correspondía por antigüedad al corte contra el que correspondía un año
+antes, **sin mirar nunca el grado que la persona tiene cargado**. Eso
+fallaba en tres situaciones reales:
+
+1. **Grado cargado de más** (ej. FARACI, con grado 5 dado por error): el
+   sistema la mostraba "ascendiendo de 4 a 5" aunque ya tenía 5.
+2. **Cambio de tareas** (ej. IAIA, Fabio): el conteo vuelve a empezar
+   pero conserva su grado; no debe ascender hasta que la antigüedad nueva
+   supere el grado que ya tiene.
+3. **Ascenso que se olvidó cargar**: el grado quedaba atrasado para
+   siempre sin que nada lo avisara.
+
+**Regla nueva**, para cortes cuyo ascenso todavía no rige (año en curso o
+futuros): se parte del **grado cargado**. Asciende sólo si el grado que
+corresponde por antigüedad lo supera.
+- Si tiene cargado un grado mayor al que corresponde, no asciende hasta
+  superarlo.
+- Si lo tiene menor, aparece en la lista en rojo como **"Pendiente de
+  carga"**, indicando desde qué fecha le corresponde.
+- Si se proyecta más de un año adelante, se asume que los ascensos
+  intermedios se otorgan.
+- Los años ya cerrados se siguen calculando como antes, porque no hay
+  historial de qué grado tenía cada uno en ese momento.
+
+La ficha del agente muestra un aviso en rojo cuando el grado cargado no
+coincide con el que le corresponde hoy por antigüedad. El **grado base**
+(en "Configurar fechas / grado base") ahora significa estrictamente
+"grados reconocidos que se suman a la antigüedad contada": en un cambio
+de tareas va en 0, porque el grado que conserva ya lo respeta el grado
+cargado. Hay pruebas automáticas (`test_sistema.py`, punto 18).
+
 ## Regla de qué antigüedad previa cuenta para el ascenso (por nivel y tipo)
 
 **Corrección importante (agosto 2026)**: al importar los períodos

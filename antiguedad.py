@@ -194,18 +194,31 @@ def evaluar_agente_anio(periodos: List[Periodo], anio: int,
                          inicio_conteo: Optional[date] = None,
                          cierre_conteo: Optional[date] = None,
                          grado_base: int = 0,
-                         fecha_corte: Optional[date] = None):
+                         fecha_corte: Optional[date] = None,
+                         grado_cargado: Optional[int] = None,
+                         hoy: Optional[date] = None):
     """
-    Evalúa a un agente al corte indicado (por defecto 31/12/`anio`) y
-    también un año antes (mismo día/mes del año anterior a ese corte),
-    para determinar si hubo ascenso (con efecto el día siguiente al corte).
+    Evalúa a un agente al corte indicado (por defecto 31/12/`anio`), con
+    efecto del ascenso el día siguiente al corte.
 
-    `fecha_corte` permite evaluar en cualquier fecha del año `anio`,
-    no sólo el 31/12 (por ejemplo, para proyectar un caso a mitad de año).
+    `grados_acumulados` es el grado que le corresponde por antigüedad al
+    corte. El grado de partida contra el que se compara depende del año:
+      - Corte cuyo ascenso todavía no rige (año en curso o futuro) y con
+        grado cargado: se parte del GRADO CARGADO, que es el que la persona
+        tiene de verdad. Así, si tiene un grado mayor al que le corresponde
+        (dado por error o conservado tras un cambio de tareas) no asciende
+        hasta que la antigüedad lo supere; y si lo tiene menor (un ascenso
+        que no se cargó) queda a la vista como pendiente en vez de perderse.
+        Si el corte anterior tampoco rige todavía (proyección a más de un
+        año), se asume que el ascenso intermedio se otorga.
+      - Corte ya vigente (año cerrado) o sin grado cargado: no se sabe qué
+        grado tenía en ese momento, así que se compara contra el grado que
+        le correspondía por antigüedad un año antes.
 
     Devuelve un dict con todos los datos necesarios para persistir en
     `calculos_ascenso` y para mostrar en pantalla.
     """
+    hoy = hoy or date.today()
     corte_actual = fecha_corte or date(anio, 12, 31)
     try:
         corte_anterior = corte_actual.replace(year=corte_actual.year - 1)
@@ -220,9 +233,45 @@ def evaluar_agente_anio(periodos: List[Periodo], anio: int,
     grados_actual = grados_por_antiguedad_meses(meses_actual, grado_base)
     grados_anterior = grados_por_antiguedad_meses(meses_anterior, grado_base)
 
-    asciende = grados_actual > grados_anterior
-    grados_nuevos = grados_actual - grados_anterior if asciende else 0
-    fecha_efectiva = corte_actual + timedelta(days=1) if asciende else None
+    rige_corte_actual = corte_actual + timedelta(days=1) <= hoy
+    rige_corte_anterior = corte_anterior + timedelta(days=1) <= hoy
+    observacion = None
+    pendiente = False
+
+    if grado_cargado is None or rige_corte_actual:
+        grado_partida = grados_anterior
+    elif rige_corte_anterior:
+        grado_partida = grado_cargado
+        if grados_anterior > grado_cargado:
+            pendiente = True
+            # Buscar hacia atrás el primer corte en que ya correspondía más grado
+            # del cargado: desde el día siguiente rige el ascenso no cargado.
+            primer_corte = corte_anterior
+            for _ in range(60):
+                previo = primer_corte.replace(year=primer_corte.year - 1)
+                meses_previo = meses_computables(periodos, previo, inicio_conteo, cierre_conteo)
+                if grados_por_antiguedad_meses(meses_previo, grado_base) <= grado_cargado:
+                    break
+                primer_corte = previo
+            pendiente_desde = primer_corte + timedelta(days=1)
+            observacion = (f"Pendiente de carga: por antigüedad le corresponde grado {grados_anterior} "
+                           f"desde el {pendiente_desde.strftime('%d/%m/%Y')} y tiene cargado {grado_cargado}.")
+    else:
+        grado_partida = max(grado_cargado, grados_anterior)
+
+    if grado_cargado is not None and not rige_corte_actual and grado_cargado > grados_actual:
+        observacion = (f"Tiene cargado grado {grado_cargado}, mayor al {grados_actual} que le corresponde "
+                       f"por antigüedad: no asciende hasta superarlo.")
+
+    asciende = grados_actual > grado_partida
+    grados_nuevos = grados_actual - grado_partida if asciende else 0
+    if not asciende:
+        fecha_efectiva = None
+    elif pendiente and grados_actual == grados_anterior:
+        # No hay ascenso nuevo en este corte: sólo falta cargar uno que ya regía.
+        fecha_efectiva = pendiente_desde
+    else:
+        fecha_efectiva = corte_actual + timedelta(days=1)
 
     return {
         "anio_evaluado": corte_actual.year,
@@ -230,8 +279,9 @@ def evaluar_agente_anio(periodos: List[Periodo], anio: int,
         "antiguedad_computable_texto": texto_antiguedad(dias_actual),
         "antiguedad_computable_anios": round(anios_exactos(dias_actual), 2),
         "grados_acumulados": grados_actual,
-        "grados_anio_anterior": grados_anterior,
+        "grados_anio_anterior": grado_partida,
         "asciende": asciende,
         "grados_nuevos": grados_nuevos,
         "fecha_efectiva_ascenso": fecha_efectiva.isoformat() if fecha_efectiva else None,
+        "observacion": observacion,
     }

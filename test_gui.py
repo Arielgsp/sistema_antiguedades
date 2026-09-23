@@ -1,16 +1,26 @@
 """Prueba headless de gui.py bajo Xvfb."""
+import tempfile
 import tkinter as tk
 from tkinter import simpledialog
 from pathlib import Path
 
-# limpiar usuario local guardado de corridas anteriores, para que la
-# prueba sea repetible (si no, el diálogo de bienvenida real se traba
-# esperando un clic que nunca llega en modo headless)
-Path(__file__).resolve().parent.joinpath("data", "usuario_local.txt").unlink(missing_ok=True)
+# Usuario recordado en un archivo temporal propio de la prueba: así es
+# repetible (con un nombre ya guardado, el cartel de bienvenida real se traba
+# esperando un clic) y no toca el nombre recordado de quien la corre.
+import usuario_local
+usuario_local.ARCHIVO = Path(tempfile.mkdtemp()) / "usuario_local.txt"
 
 import gui
+import tkinter.messagebox as mb
 
 simpledialog.askstring = lambda *a, **k: "Tester Automatico"
+
+# Sin nadie que haga clic, un cartel real deja la prueba colgada para siempre:
+# un error falla la prueba en el acto y los avisos sólo se imprimen.
+def _error(titulo, msg, *a, **k):
+    raise AssertionError(f"La interfaz mostró un error: {titulo}: {msg}")
+mb.showerror = _error
+mb.showinfo = mb.showwarning = lambda titulo, msg, *a, **k: print(f"[aviso] {titulo}: {msg}")
 
 app = gui.App()
 app.update()
@@ -37,7 +47,8 @@ app.accion_limpiar_busqueda()
 app.update()
 total_todos = len(app.tree_agentes.get_children())
 print("Total mostrado con 'Mostrar todos':", total_todos)
-assert total_todos == 241, f"Se esperaban 241 agentes, se mostraron {total_todos}"
+esperados = gui.ops.contar_agentes_activos()
+assert total_todos == esperados, f"Se esperaban {esperados} agentes, se mostraron {total_todos}"
 print("OK: el botón 'Mostrar todos' resetea el buscador")
 
 # Verificar los 2 agentes que antes faltaban
@@ -76,7 +87,7 @@ app.accion_seleccionar_agente()
 app.update()
 
 def fake_form_editar(*a, **k):
-    return {"nivel": "B", "grado": "5", "dependencia": "Dependencia de prueba"}
+    return {"nombre": "PRUEBA GUI, Test", "nivel": "B", "grado": "5", "dependencia": "Dependencia de prueba"}
 gui.pedir_formulario = fake_form_editar
 app.accion_editar_agente()
 app.update()
@@ -86,14 +97,13 @@ print("Ficha tras editar:", app.lbl_ficha_sub.cget("text"))
 
 # Editar título y usar "contar desde fecha de titulación"
 def fake_form_titulo(*a, **k):
-    return {"titulo": "Lic. en Prueba", "institucion": "UBA", "fecha_titulacion": "2015-06-01", "fecha_egreso": ""}
+    return {"titulo": "Lic. en Prueba", "institucion": "UBA", "fecha_titulacion": "01/06/2015", "fecha_egreso": ""}
 gui.pedir_formulario = fake_form_titulo
 app.accion_editar_titulo()
 app.update()
 print("Títulos tras editar:", app.lbl_titulos.cget("text"))
 assert "Lic. en Prueba" in app.lbl_titulos.cget("text")
 
-import tkinter.messagebox as mb
 mb.askyesno = lambda *a, **k: True
 app.accion_usar_fecha_titulacion()
 app.update()
@@ -113,10 +123,24 @@ print("OK: agente de prueba eliminado, no queda en la base final")
 
 # Ascensos con fecha de corte personalizada
 app.entry_fecha_corte_ascensos.delete(0, "end")
-app.entry_fecha_corte_ascensos.insert(0, "2026-06-30")
+app.entry_fecha_corte_ascensos.insert(0, "30/06/2026")
 app.accion_calcular_ascensos()
 app.update()
-print("Ascensos al 2026-06-30:", len(app.tree_ascensos.get_children()), "-", app.lbl_ascensos_resumen.cget("text"))
+print("Ascensos al 30/06/2026:", len(app.tree_ascensos.get_children()), "-", app.lbl_ascensos_resumen.cget("text"))
+assert app.lbl_ascensos_resumen.cget("text").startswith("Ascienden")
+
+# Ascensos al 31/12/2026: quien ya tiene cargado el grado que le corresponde no
+# asciende otra vez, y cada fila trae la columna Observación.
+app.entry_fecha_corte_ascensos.delete(0, "end")
+app.entry_fecha_corte_ascensos.insert(0, "31/12/2026")
+app.accion_calcular_ascensos()
+app.update()
+filas = [app.tree_ascensos.item(i, "values") for i in app.tree_ascensos.get_children()]
+assert all(len(f) == 8 for f in filas)
+for f in filas:
+    a = gui.ops.obtener_agente(int(f[0]))
+    assert int(f[3]) > a["grado_actual"], f"{f[1]} figura ascendiendo a {f[3]} pero ya tiene {a['grado_actual']}"
+print("OK: nadie figura ascendiendo a un grado que ya tiene cargado")
 
 # fecha de corte automática dinámica
 r = gui.ops.obtener_fecha_corte_oficial()

@@ -469,7 +469,14 @@ class App(tk.Tk):
             self.btn_dar_baja.state(["disabled"])
             self.btn_reactivar.state(["!disabled"])
         dependencia = a.get("dependencia_1421") or "-"
-        self.lbl_ficha_sub2.config(text=f"Dependencia: {dependencia}")
+        aviso_grado = ""
+        if a["activo"] and a["grado_actual"] is not None:
+            corresponde = ops.grado_segun_antiguedad_hoy(n_doc)
+            if corresponde is not None and corresponde != a["grado_actual"]:
+                aviso_grado = (f"     ATENCIÓN: tiene cargado grado {a['grado_actual']}, "
+                               f"pero por antigüedad hoy le corresponde {corresponde}.")
+        self.lbl_ficha_sub2.config(text=f"Dependencia: {dependencia}{aviso_grado}",
+                                   fg="#B00020" if aviso_grado else "#555")
 
         cfg = a["config"] or {}
         self.lbl_config.config(
@@ -686,7 +693,10 @@ class App(tk.Tk):
              ("cierre", "Fecha de cierre de cómputo:", fecha_es(cfg.get("fecha_cierre_conteo"))),
              ("grado_base", "Grado base de partida:", str(cfg.get("grado_base", 0) or 0)),
              ("observaciones", "Observaciones:", cfg.get("observaciones") or "")],
-            ayuda="Formato de fechas: DD/MM/AAAA. Dejá vacío lo que quieras que se calcule automáticamente."
+            ayuda="Formato de fechas: DD/MM/AAAA. Dejá vacío lo que quieras que se calcule automáticamente.\n"
+                  "Grado base: grados reconocidos que se SUMAN a la antigüedad contada (normalmente 0). "
+                  "Si por un cambio de tareas el conteo vuelve a empezar pero conserva su grado, dejá 0: "
+                  "el sistema respeta el grado cargado y no lo asciende hasta que la antigüedad nueva lo supere."
         )
         if r is None:
             return
@@ -728,13 +738,16 @@ class App(tk.Tk):
         r = ops.evaluar_ascenso_agente(self.n_doc_actual, fecha.year, fecha_corte=fecha)
 
         if r["asciende"]:
-            resultado_grado = f"Asciende, con efecto a partir del {fecha_es(r['fecha_efectiva_ascenso'])}."
+            resultado_grado = (f"Asciende de grado {r['grados_anio_anterior']} a {r['grados_acumulados']}, "
+                               f"con efecto a partir del {fecha_es(r['fecha_efectiva_ascenso'])}.")
         else:
             resultado_grado = "No suma un grado nuevo en esta evaluación."
+        if r["observacion"]:
+            resultado_grado += f"  {r['observacion']}"
 
         self.lbl_proyeccion.config(
             text=f"Proyección al {fecha_txt} — "
-                 f"1421: {calc['antiguedad_texto']} (grados: {r['grados_acumulados']})  |  "
+                 f"1421: {calc['antiguedad_texto']} (grado por antigüedad: {r['grados_acumulados']})  |  "
                  f"APN: {calc['antiguedad_apn_texto']}  |  {resultado_grado}"
         )
 
@@ -925,13 +938,13 @@ class App(tk.Tk):
         self.lbl_ascensos_resumen = tk.Label(frame, text="", font=("Segoe UI", 10, "bold"), bg=COLOR_BG, fg=COLOR_HEADER)
         self.lbl_ascensos_resumen.pack(anchor="w", padx=4)
 
-        cols = ("doc", "nombre", "grado_ant", "grado_nuevo", "suma", "antiguedad", "efectivo")
+        cols = ("doc", "nombre", "grado_ant", "grado_nuevo", "suma", "antiguedad", "efectivo", "obs")
         self.tree_ascensos = ttk.Treeview(frame, columns=cols, show="headings", height=25)
         titulos = {"doc": "Documento", "nombre": "Apellido y Nombre", "grado_ant": "Grado anterior",
                    "grado_nuevo": "Grado nuevo", "suma": "Suma", "antiguedad": "Antigüedad computable",
-                   "efectivo": "Fecha efectiva"}
-        anchos = {"doc": 90, "nombre": 260, "grado_ant": 100, "grado_nuevo": 100, "suma": 60,
-                  "antiguedad": 220, "efectivo": 110}
+                   "efectivo": "Fecha efectiva", "obs": "Observación"}
+        anchos = {"doc": 90, "nombre": 240, "grado_ant": 95, "grado_nuevo": 90, "suma": 50,
+                  "antiguedad": 190, "efectivo": 100, "obs": 420}
         for c in cols:
             self.tree_ascensos.heading(c, text=titulos[c])
             self.tree_ascensos.column(c, width=anchos[c])
@@ -953,13 +966,17 @@ class App(tk.Tk):
         resultados = ops.listar_ascensos_anio(anio, fecha_corte=fecha_corte)
         self.tree_ascensos.delete(*self.tree_ascensos.get_children())
         for r in resultados:
-            self.tree_ascensos.insert("", "end", values=(
+            self.tree_ascensos.insert("", "end", tags=("pendiente",) if r["observacion"] else (), values=(
                 r["n_doc"], r["apellido_nombre"], r["grados_anio_anterior"], r["grados_acumulados"],
-                f"+{r['grados_nuevos']}", r["antiguedad_computable_texto"], fecha_es(r["fecha_efectiva_ascenso"])))
+                f"+{r['grados_nuevos']}", r["antiguedad_computable_texto"], fecha_es(r["fecha_efectiva_ascenso"]),
+                r["observacion"] or ""))
+        self.tree_ascensos.tag_configure("pendiente", foreground="#B00020")
         fecha_efectiva = fecha_corte + timedelta(days=1)
+        pendientes = sum(1 for r in resultados if r["observacion"])
+        aviso = f" Atención: {pendientes} con grado pendiente de carga (en rojo)." if pendientes else ""
         self.lbl_ascensos_resumen.config(
             text=f"Ascienden {len(resultados)} agente(s) del Decreto 1421/02, "
-                 f"con efecto a partir del {fecha_es(fecha_efectiva.isoformat())}.")
+                 f"con efecto a partir del {fecha_es(fecha_efectiva.isoformat())}.{aviso}")
         self._ultimo_anio_calculado = anio
         self._ultima_fecha_corte_calculada = fecha_corte
         self.set_status("Cálculo completado.")

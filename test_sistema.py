@@ -277,6 +277,52 @@ a_reactivado = ops.obtener_agente(TEST_DOC)
 assert a_reactivado["activo"] == 1 and a_reactivado["cuenta_1421"] == 1
 print("OK: reactivar deshace la baja correctamente")
 
+# 18) El ascenso se decide contra el GRADO CARGADO (año en curso/futuro), no
+# contra el grado teórico del año anterior. Cálculo puro, con "hoy" fijo.
+linea("18) Ascenso contra el grado cargado (grado de más, cambio de tareas, grado olvidado)")
+from antiguedad import evaluar_agente_anio
+HOY = date(2026, 9, 23)
+ingreso_2014 = [Periodo(date(2014, 1, 1), None, True, "Ministerio")]
+
+# Caso FARACI: por antigüedad llega a grado 4 al 31/12/2026, pero ya tiene 5 cargado.
+r = evaluar_agente_anio(ingreso_2014, 2026, grado_cargado=5, hoy=HOY)
+assert r["grados_acumulados"] == 4 and r["asciende"] is False, r
+assert "mayor" in r["observacion"]
+r = evaluar_agente_anio(ingreso_2014, 2029, grado_cargado=5, hoy=HOY)
+assert r["grados_acumulados"] == 5 and r["asciende"] is False, "Con 5 cargado no debe ascender al llegar a 5"
+r = evaluar_agente_anio(ingreso_2014, 2031, grado_cargado=5, hoy=HOY)
+assert r["asciende"] is True and (r["grados_anio_anterior"], r["grados_acumulados"]) == (5, 6), r
+print("OK: con un grado cargado de más, no asciende hasta que la antigüedad lo supera")
+
+# Caso IAIA: cambio de tareas, cuenta desde 05/04/2023 con grado base 0, conserva grado 2.
+r = evaluar_agente_anio(ingreso_2014, 2026, inicio_conteo=date(2023, 4, 5), grado_cargado=2, hoy=HOY)
+assert r["asciende"] is False, r
+ascensos = [a for a in range(2026, 2036)
+            if evaluar_agente_anio(ingreso_2014, a, inicio_conteo=date(2023, 4, 5), grado_cargado=2, hoy=HOY)["asciende"]]
+assert ascensos[0] == 2032, f"Debería ascender recién a los 9 años (corte 2032), no en {ascensos[0]}"
+print("OK: tras un cambio de tareas conserva su grado y asciende recién a los 9 años del nuevo conteo")
+
+# Caso genérico: correspondía grado 1 desde el 01/01/2027 y nunca se cargó.
+ingreso_2024 = [Periodo(date(2024, 1, 1), None, True, "Ministerio")]
+r = evaluar_agente_anio(ingreso_2024, 2026, grado_cargado=0, hoy=HOY)
+assert r["asciende"] is True and r["observacion"] is None, "El ascenso normal del año no es un pendiente"
+r = evaluar_agente_anio(ingreso_2024, 2028, grado_cargado=0, hoy=date(2028, 9, 23))
+assert r["asciende"] is True and (r["grados_anio_anterior"], r["grados_acumulados"]) == (0, 1), r
+assert r["fecha_efectiva_ascenso"] == "2027-01-01" and "Pendiente de carga" in r["observacion"], r
+print("OK: un grado que se olvidó cargar queda marcado como pendiente, con la fecha desde la que corresponde")
+
+# Proyección a más de un año: se asume que el ascenso intermedio se otorga.
+r = evaluar_agente_anio(ingreso_2024, 2029, grado_cargado=0, hoy=HOY)
+assert r["asciende"] is True and (r["grados_anio_anterior"], r["grados_acumulados"]) == (1, 2), r
+assert r["observacion"] is None
+print("OK: proyectar varios años adelante no marca como pendiente los ascensos intermedios")
+
+# Años ya cerrados: sin historial de grados, se sigue comparando contra el año anterior.
+r = evaluar_agente_anio(ingreso_2014, 2025, grado_cargado=5, hoy=HOY)
+assert (r["grados_anio_anterior"], r["grados_acumulados"]) == (3, 4) and r["asciende"] is True, r
+assert r["observacion"] is None, r
+print("OK: los listados de años ya cerrados no cambian")
+
 # Limpieza del agente de prueba (dejamos la base real intacta)
 linea("Limpieza: eliminando agente de prueba")
 conn = get_connection()

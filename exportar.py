@@ -35,7 +35,7 @@ def exportar_ascensos_excel(anio: int, solo_1421: bool = True, fecha_corte=None)
 
     encabezados = ["N° Documento", "Apellido y Nombre", "Grado anterior", "Grado nuevo",
                    "Grados que suma", "Antigüedad computable", "Antigüedad (años)",
-                   "Fecha efectiva del ascenso"]
+                   "Fecha efectiva del ascenso", "Observación"]
     ws.append([f"Universo: {universo}"])
     ws.append(encabezados)
     for cell in ws[2]:
@@ -47,10 +47,10 @@ def exportar_ascensos_excel(anio: int, solo_1421: bool = True, fecha_corte=None)
         ws.append([
             r["n_doc"], r["apellido_nombre"], r["grados_anio_anterior"], r["grados_acumulados"],
             r["grados_nuevos"], r["antiguedad_computable_texto"], r["antiguedad_computable_anios"],
-            r["fecha_efectiva_ascenso"],
+            r["fecha_efectiva_ascenso"], r["observacion"] or "",
         ])
 
-    for col, ancho in zip("ABCDEFGH", [14, 38, 14, 12, 14, 26, 16, 22]):
+    for col, ancho in zip("ABCDEFGHI", [14, 38, 14, 12, 14, 26, 16, 22, 70]):
         ws.column_dimensions[col].width = ancho
     for row in ws.iter_rows(min_row=3):
         for cell in row:
